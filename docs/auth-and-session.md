@@ -2,6 +2,8 @@
 
 Flutter does **not** share cookies with the user’s browser. Implement a **persistent cookie jar** for the WordPress host and treat session endpoints as **never cacheable**.
 
+**Canonical auth roadmap (cookies, Application Passwords, future JWT):** [StoreFuse Bridge auth-strategy.md](https://github.com/ProgrammerNomad/storefuse-bridge/blob/main/docs/auth-strategy.md) — do not duplicate that document here.
+
 Contrast with Next.js: [Bridge mobile-flutter client guide](https://github.com/ProgrammerNomad/storefuse-bridge/blob/main/docs/clients/mobile-flutter.md).
 
 ---
@@ -22,7 +24,7 @@ Obtain WP nonce: `GET /auth/nonce` or from `GET /auth/me` / login response (`non
 1. `GET /auth/nonce`
 2. `POST /auth/login` - body `{ "email", "password", "remember" }` + `X-WP-Nonce`
 3. Persist cookies; store `cart_nonce` for cart API
-4. `GET /auth/me` - profile refresh
+4. `GET /auth/me` - profile refresh (`logged_in: false` when logged out; HTTP 200)
 
 Logout: `POST /auth/logout` + `X-WP-Nonce` + auth cookies.
 
