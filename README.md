@@ -21,7 +21,7 @@ StoreFuse Flutter will be a **native client** for the same headless API as Store
 
 | Doc | Purpose |
 |-----|---------|
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Phases 0–7 overview |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Phases 0-7 overview |
 | [docs/phases/](docs/phases/) | Per-phase stories, screens, verified API calls |
 | [docs/integration.md](docs/integration.md) | HTTP, base URL, envelope parsing |
 | [docs/auth-and-session.md](docs/auth-and-session.md) | Cookies, nonces, cart token |

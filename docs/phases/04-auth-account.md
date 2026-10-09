@@ -39,6 +39,6 @@
 
 ## Acceptance criteria
 
-- [ ] Login merges guest cart (checklist steps 2, 6–7)
+- [ ] Login merges guest cart (checklist steps 2, 6-7)
 - [ ] `GET /auth/me` after cold start with stored cookies
 - [ ] POST `/reviews` uses login + WP nonce (if implementing review submit)

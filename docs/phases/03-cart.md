@@ -33,4 +33,4 @@
 
 - [ ] Guest cart survives app restart (cookie jar)
 - [ ] Invalid nonce shows recoverable error (refresh nonces via auth phase)
-- [ ] Manual checklist steps 1, 3–4 in [verified-routes.md](https://github.com/ProgrammerNomad/storefuse-bridge/blob/main/docs/verified-routes.md) pass on dev site
+- [ ] Manual checklist steps 1, 3-4 in [verified-routes.md](https://github.com/ProgrammerNomad/storefuse-bridge/blob/main/docs/verified-routes.md) pass on dev site
