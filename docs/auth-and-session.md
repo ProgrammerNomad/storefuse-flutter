@@ -1,6 +1,8 @@
 # Auth and session (Flutter)
 
-Flutter does **not** share cookies with the user’s browser. Implement a **persistent cookie jar** for the WordPress host and treat session endpoints as **never cacheable**.
+Flutter does **not** share cookies with the user’s browser. Implement a **persistent cookie jar** for the WordPress/WooCommerce host and treat session endpoints as **never cacheable**.
+
+**Cart session:** Bridge **1.0.1+** can restore a guest cart via signed **`X-StoreFuse-Cart-Token`** when cookies are missing, but you should still use a **cookie jar** as the primary path. The header is not a login token.
 
 **Canonical auth roadmap (cookies, Application Passwords, future JWT):** [StoreFuse Bridge auth-strategy.md](https://github.com/ProgrammerNomad/storefuse-bridge/blob/main/docs/auth-strategy.md) — do not duplicate that document here.
 
