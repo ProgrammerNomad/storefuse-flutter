@@ -7,6 +7,7 @@ import '../../core/models/json_helpers.dart';
 import '../../core/ui/show_store_error.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/empty_state_view.dart';
+import '../../core/widgets/cached_thumbnail.dart';
 import '../../core/widgets/price_text.dart';
 import 'cart_provider.dart';
 
@@ -34,6 +35,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final data = cart.data;
     final items = asJsonList(data?['items']);
     final totals = asJsonMap(data?['totals']);
+    final coupons = asJsonList(data?['coupons']);
 
     return AppScaffold(
       title: 'Cart',
@@ -73,10 +75,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                               final key = line['key'] as String? ?? '';
                               final product = asJsonMap(line['product']) ?? line;
                               final qty = parseInt(line['quantity'], fallback: 1);
-                              final thumb = imageUrl(asJsonMap(product['thumbnail'])) ??
-                                  (product['images'] is List && (product['images'] as List).isNotEmpty
-                                      ? imageUrl(asJsonMap((product['images'] as List).first))
-                                      : null);
+                              final thumb = productThumbnailUrl(product);
                               return Dismissible(
                                 key: ValueKey(key),
                                 direction: DismissDirection.endToStart,
@@ -89,9 +88,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                 onDismissed: (_) =>
                                     ref.read(cartProvider.notifier).removeLine(key),
                                 child: ListTile(
-                                  leading: thumb != null
-                                      ? Image.network(thumb, width: 48, height: 48, fit: BoxFit.cover)
-                                      : const Icon(Icons.image_outlined),
+                                  leading: cachedThumbnail(url: thumb, size: 48),
                                   title: Text(product['name']?.toString() ?? 'Item'),
                                   subtitle: PriceText(
                                     price: asJsonMap(line['price'] ?? product['price']),
@@ -123,6 +120,32 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                   ),
                 ),
                 if (items.isNotEmpty) ...[
+                  if (coupons.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      child: Wrap(
+                        spacing: 8,
+                        children: coupons.map((c) {
+                          final code = c['code']?.toString() ?? '';
+                          return InputChip(
+                            label: Text(code),
+                            onDeleted: code.isEmpty
+                                ? null
+                                : () async {
+                                    try {
+                                      await ref
+                                          .read(cartProvider.notifier)
+                                          .removeCoupon(code);
+                                    } on StoreFuseApiException catch (e) {
+                                      if (context.mounted) {
+                                        SnackBarHelper.showException(context, e);
+                                      }
+                                    }
+                                  },
+                          );
+                        }).toList(),
+                      ),
+                    ),
                   Padding(
                     padding: const EdgeInsets.all(12),
                     child: Row(

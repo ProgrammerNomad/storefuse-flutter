@@ -11,14 +11,14 @@ class PaginatedResult<T> {
     required List<T> Function(dynamic items) parseItems,
   }) {
     return PaginatedResult<T>(
-      items: parseItems(data['items']),
+      items: parseItems(listItemsFromPageData(data)),
       meta: ListMeta.fromPageData(data),
     );
   }
 
   static PaginatedResult<JsonMap> jsonMaps(JsonMap data) {
     return PaginatedResult<JsonMap>(
-      items: asJsonList(data['items']),
+      items: listItemsFromPageData(data),
       meta: ListMeta.fromPageData(data),
     );
   }

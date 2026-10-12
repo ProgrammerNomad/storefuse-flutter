@@ -21,6 +21,26 @@ void main() {
     expect(result.meta.total, 25);
   });
 
+  test('PaginatedResult resolves orders and posts resource keys', () {
+    final orders = PaginatedResult.jsonMaps({
+      'orders': [
+        {'id': 10},
+      ],
+      'meta': {'total': 1, 'page': 1, 'per_page': 10, 'total_pages': 1},
+    });
+    expect(orders.items.length, 1);
+
+    final posts = PaginatedResult.jsonMaps({
+      'posts': [
+        {'slug': 'hello'},
+      ],
+      'page': 1,
+      'total': 1,
+      'total_pages': 1,
+    });
+    expect(posts.items.first['slug'], 'hello');
+  });
+
   test('ListMeta defaults when fields missing', () {
     final meta = ListMeta.fromJson({});
     expect(meta.page, 1);

@@ -31,7 +31,11 @@ import '../features/settings/settings_screen.dart';
 import 'main_shell.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
-final _shellNavigatorKey = GlobalKey<NavigatorState>();
+final _homeNavKey = GlobalKey<NavigatorState>(debugLabel: 'home');
+final _shopNavKey = GlobalKey<NavigatorState>(debugLabel: 'shop');
+final _searchNavKey = GlobalKey<NavigatorState>(debugLabel: 'search');
+final _cartNavKey = GlobalKey<NavigatorState>(debugLabel: 'cart');
+final _accountNavKey = GlobalKey<NavigatorState>(debugLabel: 'account');
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final env = AppEnv.fromDartDefines();
@@ -40,54 +44,117 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: '/',
     routes: [
       GoRoute(path: '/', builder: (_, __) => const SplashScreen()),
-      ShellRoute(
-        navigatorKey: _shellNavigatorKey,
-        builder: (context, state, child) => MainShell(child: child),
-        routes: [
-          GoRoute(path: '/home', builder: (_, __) => const HomeScreen()),
-          GoRoute(path: '/products', builder: (_, __) => const ProductListScreen()),
-          GoRoute(path: '/search', builder: (_, __) => const SearchScreen()),
-          GoRoute(path: '/cart', builder: (_, __) => const CartScreen()),
-          GoRoute(path: '/account', builder: (_, __) => const AccountScreen()),
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
+          return MainShell(navigationShell: navigationShell);
+        },
+        branches: [
+          StatefulShellBranch(
+            navigatorKey: _homeNavKey,
+            routes: [
+              GoRoute(
+                path: '/home',
+                builder: (_, __) => const HomeScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'posts',
+                    builder: (_, __) => const PostsScreen(),
+                    routes: [
+                      GoRoute(
+                        path: ':slug',
+                        builder: (_, state) =>
+                            PostDetailScreen(slug: state.pathParameters['slug']!),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: _shopNavKey,
+            routes: [
+              GoRoute(
+                path: '/products',
+                builder: (_, __) => const ProductListScreen(),
+                routes: [
+                  GoRoute(
+                    path: ':slug',
+                    builder: (_, state) =>
+                        ProductDetailScreen(slug: state.pathParameters['slug']!),
+                  ),
+                ],
+              ),
+              GoRoute(path: '/categories', builder: (_, __) => const CategoryListScreen()),
+              GoRoute(
+                path: '/categories/:slug',
+                builder: (_, state) =>
+                    CategoryDetailScreen(slug: state.pathParameters['slug']!),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: _searchNavKey,
+            routes: [
+              GoRoute(path: '/search', builder: (_, __) => const SearchScreen()),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: _cartNavKey,
+            routes: [
+              GoRoute(
+                path: '/cart',
+                builder: (_, __) => const CartScreen(),
+                routes: [
+                  GoRoute(path: 'checkout', builder: (_, __) => const CheckoutScreen()),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: _accountNavKey,
+            routes: [
+              GoRoute(
+                path: '/account',
+                builder: (_, __) => const AccountScreen(),
+                routes: [
+                  GoRoute(path: 'edit-profile', builder: (_, __) => const EditProfileScreen()),
+                  GoRoute(
+                    path: 'change-password',
+                    builder: (_, __) => const ChangePasswordScreen(),
+                  ),
+                  GoRoute(path: 'addresses', builder: (_, __) => const AddressesScreen()),
+                  GoRoute(path: 'wishlist', builder: (_, __) => const WishlistScreen()),
+                  GoRoute(path: 'downloads', builder: (_, __) => const DownloadsScreen()),
+                ],
+              ),
+              GoRoute(path: '/orders', builder: (_, __) => const OrderListScreen()),
+              GoRoute(
+                path: '/orders/:id',
+                builder: (_, state) {
+                  final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+                  return OrderDetailScreen(orderId: id);
+                },
+              ),
+              GoRoute(
+                path: '/orders/confirm/:key',
+                builder: (_, state) =>
+                    OrderConfirmationScreen(orderKey: state.pathParameters['key']!),
+              ),
+            ],
+          ),
         ],
-      ),
-      GoRoute(
-        path: '/products/:slug',
-        builder: (_, state) => ProductDetailScreen(slug: state.pathParameters['slug']!),
       ),
       GoRoute(
         path: '/product/:slug',
         redirect: (_, state) => '/products/${state.pathParameters['slug']}',
       ),
-      GoRoute(path: '/categories', builder: (_, __) => const CategoryListScreen()),
-      GoRoute(
-        path: '/categories/:slug',
-        builder: (_, state) => CategoryDetailScreen(slug: state.pathParameters['slug']!),
-      ),
-      GoRoute(path: '/posts', builder: (_, __) => const PostsScreen()),
+      GoRoute(path: '/posts', redirect: (_, __) => '/home/posts'),
       GoRoute(
         path: '/posts/:slug',
-        builder: (_, state) => PostDetailScreen(slug: state.pathParameters['slug']!),
+        redirect: (_, state) => '/home/posts/${state.pathParameters['slug']}',
       ),
-      GoRoute(path: '/checkout', builder: (_, __) => const CheckoutScreen()),
-      GoRoute(
-        path: '/orders/confirm/:key',
-        builder: (_, state) =>
-            OrderConfirmationScreen(orderKey: state.pathParameters['key']!),
-      ),
-      GoRoute(path: '/orders', builder: (_, __) => const OrderListScreen()),
-      GoRoute(
-        path: '/orders/:id',
-        builder: (_, state) {
-          final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
-          return OrderDetailScreen(orderId: id);
-        },
-      ),
-      GoRoute(path: '/account/edit-profile', builder: (_, __) => const EditProfileScreen()),
-      GoRoute(path: '/account/change-password', builder: (_, __) => const ChangePasswordScreen()),
-      GoRoute(path: '/account/addresses', builder: (_, __) => const AddressesScreen()),
-      GoRoute(path: '/account/wishlist', builder: (_, __) => const WishlistScreen()),
-      GoRoute(path: '/account/downloads', builder: (_, __) => const DownloadsScreen()),
+      GoRoute(path: '/checkout', redirect: (_, __) => '/cart/checkout'),
       GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
       GoRoute(path: '/settings/about', builder: (_, __) => const AboutScreen()),
       GoRoute(path: '/auth/login', builder: (_, __) => const LoginScreen()),

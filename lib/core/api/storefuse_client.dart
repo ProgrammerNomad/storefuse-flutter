@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
@@ -125,7 +126,55 @@ class StoreFuseApiClient {
     }
   }
 
+  Future<void> clearSessionCookies() async {
+    await _cookieJar?.deleteAll();
+    nonces.clear();
+  }
+
+  static String generateIdempotencyKey() {
+    final random = Random();
+    return 'sf-${DateTime.now().millisecondsSinceEpoch}-'
+        '${random.nextInt(0x7fffffff).toRadixString(16)}';
+  }
+
   Future<JsonMap> _mutateEnvelope(
+    String path, {
+    required String method,
+    Map<String, dynamic>? data,
+    Map<String, dynamic>? query,
+    bool wcNonce = false,
+    bool wpNonce = false,
+    Map<String, String>? extraHeaders,
+    bool recoverWpNonce = true,
+  }) async {
+    try {
+      return await _mutateEnvelopeOnce(
+        path,
+        method: method,
+        data: data,
+        query: query,
+        wcNonce: wcNonce,
+        wpNonce: wpNonce,
+        extraHeaders: extraHeaders,
+      );
+    } on StoreFuseApiException catch (e) {
+      if (wpNonce && recoverWpNonce && e.code == 'missing_wp_nonce') {
+        await bootstrapNonces();
+        return _mutateEnvelopeOnce(
+          path,
+          method: method,
+          data: data,
+          query: query,
+          wcNonce: wcNonce,
+          wpNonce: wpNonce,
+          extraHeaders: extraHeaders,
+        );
+      }
+      rethrow;
+    }
+  }
+
+  Future<JsonMap> _mutateEnvelopeOnce(
     String path, {
     required String method,
     Map<String, dynamic>? data,
@@ -227,6 +276,11 @@ class StoreFuseApiClient {
     String? category,
     String? tag,
     String? orderby,
+    String? order,
+    num? minPrice,
+    num? maxPrice,
+    bool? onSale,
+    bool? featured,
   }) async {
     final json = await _getEnvelope(
       '/products',
@@ -236,6 +290,11 @@ class StoreFuseApiClient {
         if (category != null) 'category': category,
         if (tag != null) 'tag': tag,
         if (orderby != null) 'orderby': orderby,
+        if (order != null) 'order': order,
+        if (minPrice != null) 'min_price': minPrice,
+        if (maxPrice != null) 'max_price': maxPrice,
+        if (onSale == true) 'on_sale': true,
+        if (featured == true) 'featured': true,
       },
       useCache: true,
     );
@@ -465,7 +524,15 @@ class StoreFuseApiClient {
 
   Future<EnvelopeResult<JsonMap>> getPaymentMethods() async {
     final json = await _getEnvelope('/checkout/payment-methods');
-    return EnvelopeParser.parseSuccess(json, (d) => d);
+    return EnvelopeParser.parseSuccessDynamic(json, (data) {
+      if (data is List) {
+        return {'methods': asJsonList(data)};
+      }
+      if (data is Map<String, dynamic>) {
+        return data;
+      }
+      return <String, dynamic>{};
+    });
   }
 
   Future<EnvelopeResult<JsonMap>> getShippingMethods({Map<String, dynamic>? address}) async {
@@ -479,8 +546,18 @@ class StoreFuseApiClient {
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
-  Future<EnvelopeResult<JsonMap>> checkoutHeadless(Map<String, dynamic> body) async {
-    final json = await _mutateEnvelope('/checkout', method: 'POST', data: body, wcNonce: true);
+  Future<EnvelopeResult<JsonMap>> checkoutHeadless(
+    Map<String, dynamic> body, {
+    String? idempotencyKey,
+  }) async {
+    final key = idempotencyKey ?? generateIdempotencyKey();
+    final json = await _mutateEnvelope(
+      '/checkout',
+      method: 'POST',
+      data: body,
+      wcNonce: true,
+      extraHeaders: {'Idempotency-Key': key},
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
@@ -536,6 +613,19 @@ class StoreFuseApiClient {
 
   Future<EnvelopeResult<JsonMap>> lookupPincode(String pincode) async {
     final json = await _getEnvelope('/utils/pincode/$pincode');
+    return EnvelopeParser.parseSuccess(json, (d) => d);
+  }
+
+  Future<EnvelopeResult<JsonMap>> registerDeviceToken({
+    required String token,
+    required String platform,
+  }) async {
+    final json = await _mutateEnvelope(
+      '/account/device-token',
+      method: 'POST',
+      data: {'token': token, 'platform': platform},
+      wpNonce: true,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 

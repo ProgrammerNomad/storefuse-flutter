@@ -15,7 +15,7 @@ class ProductCard extends StatelessWidget {
     final name = product['name'] as String? ?? 'Product';
     final price = priceFormatted(asJsonMap(product['price']));
     final inStock = productInStock(product);
-    final thumb = imageUrl(asJsonMap(product['image']));
+    final thumb = productThumbnailUrl(product);
 
     return Card(
       clipBehavior: Clip.antiAlias,

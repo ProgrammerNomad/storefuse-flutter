@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/api/api_exception.dart';
@@ -15,6 +16,7 @@ import '../../core/widgets/product_gallery.dart';
 import '../../core/widgets/sale_badge.dart';
 import '../../core/widgets/stock_badge.dart';
 import '../../core/widgets/store_html.dart';
+import '../account/wishlist_ids_provider.dart';
 import '../auth/auth_repository.dart';
 import '../auth/auth_session_provider.dart';
 import '../bootstrap/bootstrap_provider.dart';
@@ -32,7 +34,7 @@ class ProductDetailScreen extends ConsumerStatefulWidget {
 
 class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   late Future<JsonMap> _productFuture;
-  Future<List<JsonMap>>? _reviewsFuture;
+  Future<({List<JsonMap> reviews, JsonMap? ratingStats})>? _reviewsFuture;
   var _quantity = 1;
   final _selectedOptions = <String, String>{};
 
@@ -43,21 +45,47 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   }
 
   int? _matchVariationId(Product product) {
-    if (!product.isVariable || product.variations.isEmpty) return null;
-    for (final v in product.variations) {
-      final attrs = asJsonList(v['attributes']);
-      var match = true;
-      for (final a in attrs) {
-        final name = a['name']?.toString() ?? a['slug']?.toString() ?? '';
-        final option = a['option']?.toString() ?? '';
-        if (_selectedOptions[name] != option) {
-          match = false;
-          break;
-        }
-      }
-      if (match) return parseInt(v['id']);
-    }
-    return null;
+    return matchProductVariationId(
+      variations: product.variations,
+      productAttributes: product.attributes,
+      selectedOptions: _selectedOptions,
+    );
+  }
+
+  List<Widget> _reviewTiles(List<JsonMap> reviews) {
+    return reviews
+        .map(
+          (r) {
+            final rating = parseInt(r['rating'], fallback: 0);
+            final verified = r['is_verified'] == true;
+            return ListTile(
+              title: Row(
+                children: [
+                  Expanded(child: Text(r['author']?.toString() ?? 'Customer')),
+                  if (rating > 0)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: List.generate(
+                        5,
+                        (i) => Icon(
+                          i < rating ? Icons.star : Icons.star_border,
+                          size: 16,
+                          color: Colors.amber,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              subtitle: Text(
+                r['content']?.toString() ?? r['review']?.toString() ?? '',
+              ),
+              trailing: verified
+                  ? const Chip(label: Text('Verified'), visualDensity: VisualDensity.compact)
+                  : null,
+            );
+          },
+        )
+        .toList();
   }
 
   @override
@@ -90,7 +118,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           }
           final product = Product.fromJson(snapshot.data!);
           if (reviewsEnabled && _reviewsFuture == null) {
-            _reviewsFuture = ref.read(catalogRepositoryProvider).reviews(product.id);
+            _reviewsFuture = ref.read(catalogRepositoryProvider).reviewsData(product.id);
           }
           final variationId = product.isVariable ? _matchVariationId(product) : null;
           final canAdd = product.inStock &&
@@ -107,6 +135,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               PriceText(price: product.price),
               const SizedBox(height: 8),
               StockBadge(product: product.toJson()),
+              if (modules['utils'] == true) _DeliveryPincodeCheck(),
               if (!product.inStock && modules['products'] == true)
                 _BackInStockNotify(slug: widget.slug),
               if (product.isVariable) ...[
@@ -159,14 +188,32 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     icon: const Icon(Icons.add_circle_outline),
                   ),
                   const Spacer(),
-                  if (modules['wishlist'] == true && ref.watch(isLoggedInProvider))
+                  if (modules['wishlist'] == true)
                     IconButton(
-                      icon: const Icon(Icons.favorite_border),
+                      icon: Icon(
+                        ref.watch(wishlistIdsProvider).valueOrNull?.contains(product.id) == true
+                            ? Icons.favorite
+                            : Icons.favorite_border,
+                      ),
                       onPressed: () async {
+                        if (!ref.read(isLoggedInProvider)) {
+                          if (context.mounted) context.push('/auth/login');
+                          return;
+                        }
                         try {
-                          await ref.read(authRepositoryProvider).wishlistAdd(product.id);
+                          final inList =
+                              ref.read(wishlistIdsProvider).valueOrNull?.contains(product.id) ==
+                                  true;
+                          if (inList) {
+                            await ref.read(wishlistIdsProvider.notifier).remove(product.id);
+                          } else {
+                            await ref.read(wishlistIdsProvider.notifier).add(product.id);
+                          }
                           if (context.mounted) {
-                            SnackBarHelper.showMessage(context, 'Added to wishlist');
+                            SnackBarHelper.showMessage(
+                              context,
+                              inList ? 'Removed from wishlist' : 'Added to wishlist',
+                            );
                           }
                         } on StoreFuseApiException catch (e) {
                           SnackBarHelper.showException(context, e);
@@ -198,7 +245,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               if (reviewsEnabled) ...[
                 const SizedBox(height: 32),
                 Text('Reviews', style: Theme.of(context).textTheme.titleMedium),
-                FutureBuilder<List<JsonMap>>(
+                FutureBuilder<({List<JsonMap> reviews, JsonMap? ratingStats})>(
                   future: _reviewsFuture,
                   builder: (context, revSnap) {
                     if (!revSnap.hasData) {
@@ -207,19 +254,19 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         child: LinearProgressIndicator(),
                       );
                     }
-                    final reviews = revSnap.data!;
-                    if (reviews.isEmpty) {
-                      return const Text('No reviews yet.');
-                    }
+                    final bundle = revSnap.data!;
+                    final reviews = bundle.reviews;
+                    final avg = bundle.ratingStats?['average'] ??
+                        bundle.ratingStats?['average_rating'];
                     return Column(
-                      children: reviews
-                          .map(
-                            (r) => ListTile(
-                              title: Text(r['author']?.toString() ?? 'Customer'),
-                              subtitle: Text(r['review']?.toString() ?? ''),
-                            ),
-                          )
-                          .toList(),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (avg != null) Text('Average rating: $avg'),
+                        if (reviews.isEmpty)
+                          const Text('No reviews yet.')
+                        else
+                          ..._reviewTiles(reviews),
+                      ],
                     );
                   },
                 ),
@@ -228,6 +275,83 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _DeliveryPincodeCheck extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_DeliveryPincodeCheck> createState() => _DeliveryPincodeCheckState();
+}
+
+class _DeliveryPincodeCheckState extends ConsumerState<_DeliveryPincodeCheck> {
+  final _controller = TextEditingController();
+  String? _message;
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _check() async {
+    final pin = _controller.text.trim();
+    if (pin.isEmpty) return;
+    setState(() {
+      _loading = true;
+      _message = null;
+    });
+    try {
+      final client = await ref.read(apiClientProvider.future);
+      final data = (await client.lookupPincode(pin)).data;
+      final serviceable = data['serviceable'] == true || data['is_serviceable'] == true;
+      setState(() {
+        _message = serviceable
+            ? 'Delivery available to $pin'
+            : 'Delivery may not be available to $pin';
+      });
+    } on StoreFuseApiException catch (e) {
+      setState(() => _message = e.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Check delivery', style: Theme.of(context).textTheme.titleSmall),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  decoration: const InputDecoration(labelText: 'Pincode / postal code'),
+                  keyboardType: TextInputType.text,
+                  onSubmitted: (_) => _check(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: _loading ? null : _check,
+                child: _loading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Check'),
+              ),
+            ],
+          ),
+          if (_message != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_message!)),
+        ],
       ),
     );
   }
@@ -344,14 +468,18 @@ class _ReviewFormState extends ConsumerState<_ReviewForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          DropdownButtonFormField<int>(
-            value: _rating,
-            decoration: const InputDecoration(labelText: 'Rating'),
-            items: List.generate(
+          Row(
+            children: List.generate(
               5,
-              (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1} stars')),
+              (i) => IconButton(
+                padding: EdgeInsets.zero,
+                icon: Icon(
+                  i < _rating ? Icons.star : Icons.star_border,
+                  color: Colors.amber,
+                ),
+                onPressed: () => setState(() => _rating = i + 1),
+              ),
             ),
-            onChanged: (v) => setState(() => _rating = v ?? 5),
           ),
           TextFormField(
             controller: _controller,

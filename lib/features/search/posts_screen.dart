@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../core/models/json_helpers.dart';
 import '../../core/providers/providers.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/cached_thumbnail.dart';
 import '../../core/widgets/error_view.dart';
 import '../../core/widgets/paginated_list_view.dart';
 import '../../core/widgets/store_html.dart';
@@ -44,15 +45,17 @@ class _PostsScreenState extends ConsumerState<PostsScreen> {
             }
             final image = imageUrl(asJsonMap(post['featured_image'] ?? post['image']));
             return ListTile(
-              leading: image != null
-                  ? Image.network(image, width: 56, height: 56, fit: BoxFit.cover)
-                  : const Icon(Icons.article_outlined),
+              leading: cachedThumbnail(
+                url: image,
+                size: 56,
+                borderRadius: BorderRadius.circular(4),
+              ),
               title: Text(title),
               subtitle: Text([
                 if (formatted != null) formatted,
                 post['author']?.toString(),
               ].whereType<String>().join(' · ')),
-              onTap: slug.isEmpty ? null : () => context.push('/posts/$slug'),
+              onTap: slug.isEmpty ? null : () => context.push('/home/posts/$slug'),
             );
           },
         ),

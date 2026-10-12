@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/storefuse_client.dart' show StoreFuseApiClient;
 import '../../core/models/json_helpers.dart';
 import '../../core/providers/providers.dart';
+import '../account/wishlist_ids_provider.dart';
+import '../auth/auth_session_provider.dart';
 import '../cart/cart_provider.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -29,7 +31,9 @@ class AuthRepository {
       'remember': remember,
     });
     await client.authMe();
+    ref.invalidate(authSessionProvider);
     await ref.read(cartProvider.notifier).refresh();
+    ref.read(wishlistIdsProvider.notifier).refresh();
   }
 
   Future<void> register({
@@ -54,7 +58,8 @@ class AuthRepository {
     try {
       await client.authLogout();
     } finally {
-      client.nonces.wpNonce = null;
+      await client.clearSessionCookies();
+      ref.invalidate(authSessionProvider);
       await ref.read(cartProvider.notifier).refresh();
     }
   }
@@ -121,7 +126,7 @@ class AuthRepository {
 
   Future<List<JsonMap>> downloads() async {
     final client = await _client();
-    return asJsonList((await client.getDownloads()).data['items']);
+    return listItemsFromPageData((await client.getDownloads()).data);
   }
 
   Future<void> submitReview({
@@ -133,6 +138,7 @@ class AuthRepository {
     await client.submitReview(body: {
       'product_id': productId,
       'rating': rating,
+      'content': review,
       'review': review,
     });
   }

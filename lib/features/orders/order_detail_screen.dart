@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/models/json_helpers.dart';
@@ -137,6 +138,30 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                   OutlinedButton(
                     onPressed: () async {
                       try {
+                        final invoice =
+                            await ref.read(ordersRepositoryProvider).invoice(widget.orderId);
+                        final url = invoice['url']?.toString() ??
+                            invoice['invoice_url']?.toString() ??
+                            invoice['print_url']?.toString();
+                        if (url == null || url.isEmpty) {
+                          if (context.mounted) {
+                            SnackBarHelper.showMessage(context, 'Invoice not available.');
+                          }
+                          return;
+                        }
+                        final uri = Uri.parse(url);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      } on StoreFuseApiException catch (e) {
+                        SnackBarHelper.showException(context, e);
+                      }
+                    },
+                    child: const Text('Invoice'),
+                  ),
+                  OutlinedButton(
+                    onPressed: () async {
+                      try {
                         final t = await ref.read(ordersRepositoryProvider).tracking(widget.orderId);
                         if (!context.mounted) return;
                         await showDialog<void>(
@@ -178,8 +203,8 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
   }
 
   String _trackingText(JsonMap t) {
-    final url = t['url']?.toString();
-    final provider = t['provider']?.toString();
+    final url = t['tracking_url']?.toString() ?? t['url']?.toString();
+    final provider = t['carrier']?.toString() ?? t['provider']?.toString();
     final number = t['tracking_number']?.toString() ?? t['number']?.toString();
     return [provider, number, url].whereType<String>().where((s) => s.isNotEmpty).join('\n');
   }

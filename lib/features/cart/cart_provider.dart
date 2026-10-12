@@ -86,7 +86,11 @@ class CartNotifier extends Notifier<CartState> {
     state = state.copyWith(loading: true, error: null);
     try {
       final cart = await _withNonceRecovery(
-        (client) async => (await client.cartUpdate({'key': key, 'quantity': quantity})).data,
+        (client) async => (await client.cartUpdate({
+              'cart_item_key': key,
+              'key': key,
+              'quantity': quantity,
+            })).data,
       );
       state = CartState(data: cart);
     } on StoreFuseApiException catch (e) {
@@ -99,7 +103,10 @@ class CartNotifier extends Notifier<CartState> {
     state = state.copyWith(loading: true, error: null);
     try {
       final cart = await _withNonceRecovery(
-        (client) async => (await client.cartRemove({'key': key})).data,
+        (client) async => (await client.cartRemove({
+              'cart_item_key': key,
+              'key': key,
+            })).data,
       );
       state = CartState(data: cart);
     } on StoreFuseApiException catch (e) {

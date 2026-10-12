@@ -36,6 +36,11 @@ class CatalogRepository {
     int perPage = 20,
     String? category,
     String? orderby,
+    String? order,
+    num? minPrice,
+    num? maxPrice,
+    bool? onSale,
+    bool? featured,
   }) async {
     final client = await _client();
     final data = (await client.getProducts(
@@ -43,6 +48,11 @@ class CatalogRepository {
       perPage: perPage,
       category: category,
       orderby: orderby,
+      order: order,
+      minPrice: minPrice,
+      maxPrice: maxPrice,
+      onSale: onSale,
+      featured: featured,
     )).data;
     return PaginatedResult.jsonMaps(data);
   }
@@ -77,8 +87,16 @@ class CatalogRepository {
   }
 
   Future<List<JsonMap>> reviews(int productId) async {
+    return (await reviewsData(productId)).reviews;
+  }
+
+  Future<({List<JsonMap> reviews, JsonMap? ratingStats})> reviewsData(int productId) async {
     final client = await _client();
-    return asJsonList((await client.getReviews(productId: productId)).data['items']);
+    final data = (await client.getReviews(productId: productId)).data;
+    return (
+      reviews: listItemsFromPageData(data),
+      ratingStats: asJsonMap(data['rating_stats']),
+    );
   }
 
   Future<List<JsonMap>> posts({int page = 1}) async {

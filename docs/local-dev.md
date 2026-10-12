@@ -31,7 +31,7 @@ cd C:\xampp\htdocs\storefuse-flutter
 flutter run --dart-define=BRIDGE_BASE_URL=http://10.0.2.2 --dart-define=APP_FLAVOR=dev
 ```
 
-The repo also sets `kotlin.incremental=false` in `android/gradle.properties` and disables Kotlin incremental compile on all Android subprojects in `android/build.gradle.kts`. **If you see `different roots` in a Gradle error, you are almost certainly building from the wrong path** — switch to `C:\xampp\htdocs\storefuse-flutter` and clean caches (below).
+The repo also sets `kotlin.incremental=false` in `android/gradle.properties` and disables Kotlin incremental compile on all Android subprojects in `android/build.gradle.kts`. **If you see `different roots` in a Gradle error, you are almost certainly building from the wrong path** - switch to `C:\xampp\htdocs\storefuse-flutter` and clean caches (below).
 
 ### Cache purge (after shortcut builds or Kotlin cache errors)
 

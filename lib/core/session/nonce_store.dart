@@ -11,6 +11,12 @@ class NonceStore {
     if (token != null) cartToken = token;
   }
 
+  void clear() {
+    wpNonce = null;
+    wcNonce = null;
+    cartToken = null;
+  }
+
   void updateFromJson(Map<String, dynamic>? json) {
     if (json == null) return;
     final wp = json['nonce'] as String?;

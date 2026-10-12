@@ -50,6 +50,107 @@ String? imageUrl(JsonMap? image) {
   return image['src'] as String? ?? image['url'] as String?;
 }
 
+/// Resolves list payloads from Bridge paginated envelopes (`items`, `orders`, etc.).
+List<JsonMap> listItemsFromPageData(JsonMap data) {
+  for (final key in const [
+    'items',
+    'orders',
+    'posts',
+    'reviews',
+    'downloads',
+    'products',
+  ]) {
+    final list = data[key];
+    if (list is List && list.isNotEmpty) {
+      return asJsonList(list);
+    }
+  }
+  return asJsonList(data['items']);
+}
+
+/// Product/search card thumbnail from common Bridge shapes.
+String? productThumbnailUrl(JsonMap product) {
+  final thumb = imageUrl(asJsonMap(product['thumbnail']));
+  if (thumb != null) return thumb;
+  final single = imageUrl(asJsonMap(product['image']));
+  if (single != null) return single;
+  final images = product['images'];
+  if (images is List && images.isNotEmpty) {
+    return imageUrl(asJsonMap(images.first));
+  }
+  return null;
+}
+
+bool variationAttributeValueMatches(String variationValue, String selectedLabel) {
+  final expected = variationValue.toLowerCase();
+  final selected = selectedLabel.toLowerCase();
+  final slugified = selected.replaceAll(' ', '-');
+  return expected.isEmpty ||
+      expected == selected ||
+      expected == slugified;
+}
+
+/// Flattens Bridge checkout `packages[].methods` into a single method list.
+List<JsonMap> shippingMethodsFromCheckoutData(JsonMap data) {
+  final flat = asJsonList(data['methods'] ?? data['shipping_methods'] ?? data['items']);
+  if (flat.isNotEmpty) return flat;
+
+  final packages = data['packages'];
+  if (packages is! List) return const [];
+
+  final merged = <JsonMap>[];
+  for (final pkg in packages) {
+    if (pkg is! Map) continue;
+    final map = Map<String, dynamic>.from(pkg);
+    final index = map['index'];
+    for (final method in asJsonList(map['methods'])) {
+      if (index != null) {
+        method['_package_index'] = index;
+      }
+      merged.add(method);
+    }
+  }
+  return merged;
+}
+
+/// Matches a variable product variation from WC-style attribute maps.
+int? matchProductVariationId({
+  required List<JsonMap> variations,
+  required List<JsonMap> productAttributes,
+  required Map<String, String> selectedOptions,
+}) {
+  if (variations.isEmpty || selectedOptions.isEmpty) return null;
+
+  for (final v in variations) {
+    final rawAttrs = v['attributes'];
+    if (rawAttrs is! Map) continue;
+    final varAttrs = Map<String, dynamic>.from(rawAttrs);
+    var matches = true;
+
+    for (final attr in productAttributes) {
+      final label = attr['name']?.toString() ?? '';
+      final slug = attr['slug']?.toString() ?? '';
+      if (label.isEmpty || slug.isEmpty) continue;
+
+      final selected = selectedOptions[label];
+      if (selected == null || selected.isEmpty) {
+        matches = false;
+        break;
+      }
+
+      final key = slug.startsWith('attribute_') ? slug : 'attribute_$slug';
+      final expected = varAttrs[key]?.toString() ?? '';
+      if (!variationAttributeValueMatches(expected, selected)) {
+        matches = false;
+        break;
+      }
+    }
+
+    if (matches) return parseInt(v['id']);
+  }
+  return null;
+}
+
 @immutable
 class ListMeta {
   const ListMeta({
@@ -97,7 +198,7 @@ class PaginatedListResult {
 
   factory PaginatedListResult.fromJson(JsonMap data) {
     return PaginatedListResult(
-      items: asJsonList(data['items']),
+      items: listItemsFromPageData(data),
       meta: ListMeta.fromPageData(data),
     );
   }

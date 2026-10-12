@@ -7,6 +7,7 @@ import '../../core/models/json_helpers.dart';
 import '../../core/ui/show_store_error.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/empty_state_view.dart';
+import '../../core/widgets/cached_thumbnail.dart';
 import '../../core/widgets/price_text.dart';
 import '../auth/auth_repository.dart';
 
@@ -69,14 +70,9 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
                 final product = asJsonMap(item['product']) ?? item;
                 final productId = parseInt(product['id'] ?? item['product_id']);
                 final slug = product['slug'] as String? ?? '';
-                final images = product['images'];
-                final url = images is List && images.isNotEmpty
-                    ? imageUrl(asJsonMap(images.first))
-                    : imageUrl(asJsonMap(product['thumbnail']));
+                final url = productThumbnailUrl(product);
                 return ListTile(
-                  leading: url != null
-                      ? Image.network(url, width: 48, height: 48, fit: BoxFit.cover)
-                      : const Icon(Icons.favorite_border),
+                  leading: cachedThumbnail(url: url, size: 48),
                   title: Text(product['name']?.toString() ?? 'Product'),
                   subtitle: PriceText(price: asJsonMap(product['price'])),
                   onTap: slug.isEmpty ? null : () => context.push('/products/$slug'),

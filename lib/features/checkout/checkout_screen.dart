@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/models/json_helpers.dart';
+import '../../core/api/storefuse_client.dart';
 import '../../core/providers/providers.dart';
 import '../../core/ui/show_store_error.dart' show SnackBarHelper;
 import '../../core/widgets/app_scaffold.dart';
@@ -88,7 +89,9 @@ class _RedirectCheckout extends ConsumerWidget {
                     await client.bootstrapNonces();
                   }
                   final data = (await client.checkoutRedirectUrl()).data;
-                  final url = data['url'] as String? ?? data['checkout_url'] as String?;
+                  final url = data['redirect_url'] as String? ??
+                      data['checkout_url'] as String? ??
+                      data['url'] as String?;
                   if (url == null || url.isEmpty) {
                     throw StoreFuseApiException(message: 'No checkout URL returned.');
                   }
@@ -131,10 +134,18 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
   final _state = TextEditingController();
   final _notes = TextEditingController();
   final _country = ValueNotifier<String>('');
+  final _shipFirstName = TextEditingController();
+  final _shipLastName = TextEditingController();
+  final _shipAddress1 = TextEditingController();
+  final _shipCity = TextEditingController();
+  final _shipPostcode = TextEditingController();
+  final _shipState = TextEditingController();
+  final _shipCountry = ValueNotifier<String>('');
   bool _sameAsBilling = true;
   bool _acceptedTerms = false;
   bool _submitting = false;
   bool _loadingMethods = true;
+  String? _idempotencyKey;
 
   List<JsonMap> _paymentMethods = const [];
   List<JsonMap> _shippingMethods = const [];
@@ -164,6 +175,13 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
     _state.dispose();
     _notes.dispose();
     _country.dispose();
+    _shipFirstName.dispose();
+    _shipLastName.dispose();
+    _shipAddress1.dispose();
+    _shipCity.dispose();
+    _shipPostcode.dispose();
+    _shipState.dispose();
+    _shipCountry.dispose();
     super.dispose();
   }
 
@@ -178,6 +196,20 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
       'postcode': _postcode.text.trim(),
       'state': _state.text.trim(),
       'country': country.isEmpty ? 'IN' : country,
+    };
+  }
+
+  JsonMap _shippingPayload() {
+    if (_sameAsBilling) return _billingPayload();
+    final country = _shipCountry.value.trim();
+    return {
+      'first_name': _shipFirstName.text.trim(),
+      'last_name': _shipLastName.text.trim(),
+      'address_1': _shipAddress1.text.trim(),
+      'city': _shipCity.text.trim(),
+      'postcode': _shipPostcode.text.trim(),
+      'state': _shipState.text.trim(),
+      'country': country.isEmpty ? _billingPayload()['country'] : country,
     };
   }
 
@@ -208,7 +240,7 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
       }
       final billing = _billingPayload();
       final data = (await client.getShippingMethods(address: billing)).data;
-      final methods = asJsonList(data['methods'] ?? data['shipping_methods'] ?? data['items']);
+      final methods = shippingMethodsFromCheckoutData(data);
       setState(() {
         _shippingMethods = methods;
         _shippingMethodId = methods.isNotEmpty
@@ -243,14 +275,37 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
         await client.bootstrapNonces();
       }
       final billing = _billingPayload();
-      final shipping = _sameAsBilling ? billing : billing;
-      final result = (await client.checkoutHeadless({
-        'billing': billing,
-        'shipping': shipping,
-        'payment_method': _paymentMethodId,
-        if (_shippingMethodId != null) 'shipping_method': [_shippingMethodId],
-        if (_notes.text.trim().isNotEmpty) 'order_comments': _notes.text.trim(),
-      })).data;
+      final shipping = _shippingPayload();
+      _idempotencyKey ??= StoreFuseApiClient.generateIdempotencyKey();
+      final result = (await client.checkoutHeadless(
+        {
+          'billing': billing,
+          'shipping': shipping,
+          'ship_to_different_address': !_sameAsBilling,
+          'payment_method': _paymentMethodId,
+          if (_shippingMethodId != null) 'shipping_method': [_shippingMethodId],
+          if (_notes.text.trim().isNotEmpty) ...{
+            'order_notes': _notes.text.trim(),
+            'order_comments': _notes.text.trim(),
+          },
+        },
+        idempotencyKey: _idempotencyKey,
+      )).data;
+
+      final payment = asJsonMap(result['payment_result']);
+      final paymentType = payment?['type']?.toString();
+      final paymentUrl = payment?['redirect_url']?.toString();
+      if (paymentType == 'redirect' &&
+          paymentUrl != null &&
+          paymentUrl.isNotEmpty &&
+          context.mounted) {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => CheckoutWebViewScreen(initialUrl: paymentUrl),
+          ),
+        );
+      }
+
       final key = result['order_key']?.toString() ?? result['key']?.toString();
       if (key != null && context.mounted) {
         context.go('/orders/confirm/$key');
@@ -355,6 +410,33 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
             onChanged: (v) => setState(() => _sameAsBilling = v),
             title: const Text('Shipping same as billing'),
           ),
+          if (!_sameAsBilling) ...[
+            Text('Shipping address', style: Theme.of(context).textTheme.titleSmall),
+            TextFormField(
+              controller: _shipFirstName,
+              decoration: const InputDecoration(labelText: 'Shipping first name'),
+              validator: (v) =>
+                  !_sameAsBilling && (v == null || v.trim().isEmpty) ? 'Required' : null,
+            ),
+            TextFormField(
+              controller: _shipLastName,
+              decoration: const InputDecoration(labelText: 'Shipping last name'),
+              validator: (v) =>
+                  !_sameAsBilling && (v == null || v.trim().isEmpty) ? 'Required' : null,
+            ),
+            TextFormField(
+              controller: _shipAddress1,
+              decoration: const InputDecoration(labelText: 'Shipping address'),
+              validator: (v) =>
+                  !_sameAsBilling && (v == null || v.trim().isEmpty) ? 'Required' : null,
+            ),
+            AddressFields(
+              countryController: _shipCountry,
+              postcodeController: _shipPostcode,
+              cityController: _shipCity,
+              stateController: _shipState,
+            ),
+          ],
           if (_paymentMethods.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text('Payment method', style: Theme.of(context).textTheme.titleSmall),

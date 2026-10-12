@@ -300,7 +300,7 @@ class _ProductRow extends ConsumerWidget {
               child: Text(title, style: Theme.of(context).textTheme.titleMedium),
             ),
             SizedBox(
-              height: 240,
+              height: 272,
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 scrollDirection: Axis.horizontal,
