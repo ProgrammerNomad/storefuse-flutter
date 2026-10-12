@@ -1,0 +1,57 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/api/storefuse_client.dart' show StoreFuseApiClient;
+import '../../core/models/json_helpers.dart';
+import '../../core/providers/providers.dart';
+
+final ordersRepositoryProvider = Provider<OrdersRepository>((ref) {
+  return OrdersRepository(ref);
+});
+
+class OrdersRepository {
+  OrdersRepository(this.ref);
+
+  final Ref ref;
+
+  Future<StoreFuseApiClient> _client() => ref.read(apiClientProvider.future);
+
+  Future<List<JsonMap>> list({int page = 1, int perPage = 10}) async {
+    final client = await _client();
+    return asJsonList((await client.getOrders(page: page, perPage: perPage)).data['items']);
+  }
+
+  Future<JsonMap> byId(int id) async {
+    final client = await _client();
+    return (await client.getOrderById(id)).data;
+  }
+
+  Future<JsonMap> byKey(String key) async {
+    final client = await _client();
+    return (await client.getOrderByKey(key)).data;
+  }
+
+  Future<JsonMap> cancel(int id) async {
+    final client = await _client();
+    return (await client.cancelOrder(id)).data;
+  }
+
+  Future<JsonMap> reorder(int id) async {
+    final client = await _client();
+    return (await client.reorder(id)).data;
+  }
+
+  Future<JsonMap> returnRequest(int id, {String? reason}) async {
+    final client = await _client();
+    return (await client.returnRequest(id, reason: reason)).data;
+  }
+
+  Future<JsonMap> tracking(int id) async {
+    final client = await _client();
+    return (await client.getTracking(id)).data;
+  }
+
+  Future<JsonMap> invoice(int id) async {
+    final client = await _client();
+    return (await client.getInvoice(id)).data;
+  }
+}
