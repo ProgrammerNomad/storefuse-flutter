@@ -2,6 +2,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'features/bootstrap/bootstrap_provider.dart';
+import 'features/bootstrap/store_branding.dart';
 import 'routing/app_router.dart';
 
 class StoreFuseApp extends ConsumerStatefulWidget {
@@ -30,12 +32,12 @@ class _StoreFuseAppState extends ConsumerState<StoreFuseApp> {
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(appRouterProvider);
+    final storeName = ref.watch(storeNameProvider);
+    final theme = ref.watch(storeThemeProvider);
+
     return MaterialApp.router(
-      title: 'StoreFuse',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFE85D04)),
-        useMaterial3: true,
-      ),
+      title: storeName,
+      theme: theme,
       routerConfig: router,
       builder: (context, child) {
         return Column(

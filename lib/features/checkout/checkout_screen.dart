@@ -6,6 +6,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/json_helpers.dart';
 import '../../core/providers/providers.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/address_fields.dart';
 import '../../core/widgets/error_view.dart';
 import '../bootstrap/bootstrap_provider.dart';
 import 'checkout_webview_screen.dart';
@@ -126,6 +127,8 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
   final _address1 = TextEditingController();
   final _city = TextEditingController();
   final _postcode = TextEditingController();
+  final _state = TextEditingController();
+  final _country = ValueNotifier<String>('IN');
   bool _submitting = false;
 
   @override
@@ -136,6 +139,8 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
     _address1.dispose();
     _city.dispose();
     _postcode.dispose();
+    _state.dispose();
+    _country.dispose();
     super.dispose();
   }
 
@@ -154,7 +159,8 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
           'address_1': _address1.text.trim(),
           'city': _city.text.trim(),
           'postcode': _postcode.text.trim(),
-          'country': 'IN',
+          'state': _state.text.trim(),
+          'country': _country.value.trim().isEmpty ? 'IN' : _country.value.trim(),
         },
         'payment_method': 'cod',
       })).data;
@@ -180,8 +186,12 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
         TextField(controller: _firstName, decoration: const InputDecoration(labelText: 'First name')),
         TextField(controller: _lastName, decoration: const InputDecoration(labelText: 'Last name')),
         TextField(controller: _address1, decoration: const InputDecoration(labelText: 'Address')),
-        TextField(controller: _city, decoration: const InputDecoration(labelText: 'City')),
-        TextField(controller: _postcode, decoration: const InputDecoration(labelText: 'Postcode')),
+        AddressFields(
+          countryController: _country,
+          postcodeController: _postcode,
+          cityController: _city,
+          stateController: _state,
+        ),
         const SizedBox(height: 16),
         FilledButton(
           onPressed: _submitting ? null : _placeOrder,

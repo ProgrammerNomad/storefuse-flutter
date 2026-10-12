@@ -47,7 +47,7 @@ flutter analyze
 flutter test
 ```
 
-CI: [.github/workflows/flutter_ci.yml](.github/workflows/flutter_ci.yml)
+CI: [.github/workflows/flutter.yml](.github/workflows/flutter.yml)
 
 ## Implemented phases
 
@@ -68,6 +68,12 @@ CI: [.github/workflows/flutter_ci.yml](.github/workflows/flutter_ci.yml)
 - [docs/integration.md](docs/integration.md)
 - Bridge [mobile-flutter.md](https://github.com/ProgrammerNomad/storefuse-bridge/blob/main/docs/clients/mobile-flutter.md)
 
+## Go-live
+
+- [docs/local-store-setup.md](docs/local-store-setup.md) - seed WooCommerce for E2E testing
+- [docs/release.md](docs/release.md) - prod builds and signing
+- [docs/VERIFIED_CHECKLIST.md](docs/VERIFIED_CHECKLIST.md) - manual session sign-off
+
 ## License
 
-TBD
+[MIT](LICENSE)

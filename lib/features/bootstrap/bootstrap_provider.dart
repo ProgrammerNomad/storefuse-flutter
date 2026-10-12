@@ -92,24 +92,13 @@ class BootstrapNotifier extends AsyncNotifier<BootstrapState> {
         throw StoreFuseApiException(message: 'Store is unavailable right now.');
       }
 
-      JsonMap? settings;
-      try {
-        settings = (await client.getSettings()).data;
-      } catch (_) {}
+      final settingsFuture = _loadSettings(client);
+      final cartFuture = _loadCart(client);
+      final authFuture = client.authMe().then((_) {}, onError: (_) {});
 
-      JsonMap? cart;
-      try {
-        cart = (await client.getCart()).data;
-      } catch (_) {
-        try {
-          await client.bootstrapNonces();
-          cart = (await client.getCart()).data;
-        } catch (_) {}
-      }
-
-      try {
-        await client.authMe();
-      } catch (_) {}
+      final settings = await settingsFuture;
+      final cart = await cartFuture;
+      await authFuture;
 
       return BootstrapState(
         loading: false,
@@ -123,10 +112,35 @@ class BootstrapNotifier extends AsyncNotifier<BootstrapState> {
     } on StoreFuseApiException catch (e) {
       return BootstrapState(loading: false, error: e);
     } catch (_) {
+      final env = ref.read(appEnvProvider);
+      final hint = env.isProd
+          ? ''
+          : ' Check ${env.bridgeBaseUrl} (Android emulator: http://10.0.2.2).';
       return BootstrapState(
         loading: false,
-        error: StoreFuseApiException(message: 'Could not connect to the store.'),
+        error: StoreFuseApiException(message: 'Could not connect to the store.$hint'),
       );
+    }
+  }
+
+  Future<JsonMap?> _loadSettings(StoreFuseApiClient client) async {
+    try {
+      return (await client.getSettings()).data;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<JsonMap?> _loadCart(StoreFuseApiClient client) async {
+    try {
+      return (await client.getCart()).data;
+    } catch (_) {
+      try {
+        await client.bootstrapNonces();
+        return (await client.getCart()).data;
+      } catch (_) {
+        return null;
+      }
     }
   }
 }

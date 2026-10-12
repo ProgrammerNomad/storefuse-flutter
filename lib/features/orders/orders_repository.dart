@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_exception.dart';
 import '../../core/api/storefuse_client.dart' show StoreFuseApiClient;
 import '../../core/models/json_helpers.dart';
 import '../../core/providers/providers.dart';
@@ -36,8 +37,15 @@ class OrdersRepository {
   }
 
   Future<JsonMap> reorder(int id) async {
-    final client = await _client();
-    return (await client.reorder(id)).data;
+    try {
+      final client = await _client();
+      return (await client.reorder(id)).data;
+    } on StoreFuseApiException catch (e) {
+      if (e.code != 'missing_wc_nonce') rethrow;
+      final client = await _client();
+      await client.bootstrapNonces();
+      return (await client.reorder(id)).data;
+    }
   }
 
   Future<JsonMap> returnRequest(int id, {String? reason}) async {

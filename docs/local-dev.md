@@ -1,5 +1,7 @@
 # Local development (WordPress + XAMPP)
 
+Seed products and payments: [local-store-setup.md](local-store-setup.md).
+
 ## Smoke test
 
 ```bash
@@ -17,6 +19,19 @@ Expect `data.status === "ok"` and Bridge version ≥ **1.0.2**.
 | Physical device | `http://<your-pc-lan-ip>` |
 
 Full API root: `{BRIDGE_BASE_URL}/wp-json/storefuse/v1`
+
+## Windows: use the real project path (not a drive shortcut)
+
+If you open the repo through a **shortcut on another drive** (for example `D:\Websites\storefuse-flutter` → `C:\xampp\htdocs\storefuse-flutter`), Gradle may resolve the project on **D:** while Flutter plugins load from **C:** (`PUB_CACHE`). Kotlin incremental compilation can then fail with `different roots` errors involving plugins such as `webview_flutter_android`.
+
+**Fix:** run all Flutter/Gradle commands from the **canonical folder** on one drive:
+
+```powershell
+cd C:\xampp\htdocs\storefuse-flutter
+flutter run --dart-define=BRIDGE_BASE_URL=http://10.0.2.2 --dart-define=APP_FLAVOR=dev
+```
+
+The repo also sets `kotlin.incremental=false` in `android/gradle.properties` as a safety net if you must use a shortcut. After path or Gradle changes, run `flutter clean` once.
 
 ## Run the app
 

@@ -23,6 +23,11 @@ class AppEnv {
 
   bool get isProd => flavor == 'prod';
 
+  /// Shorter timeouts in dev so splash fails fast when XAMPP/emulator URL is wrong.
+  Duration get connectTimeout => isProd ? const Duration(seconds: 30) : const Duration(seconds: 10);
+
+  Duration get receiveTimeout => isProd ? const Duration(seconds: 30) : const Duration(seconds: 10);
+
   static AppEnv fromDartDefines() {
     const flavor = String.fromEnvironment('APP_FLAVOR', defaultValue: 'dev');
     const defaultUrl = flavor == 'prod'

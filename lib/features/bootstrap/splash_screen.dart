@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../config/env.dart';
+import '../../core/providers/providers.dart';
 import '../../core/widgets/error_view.dart';
+import '../../core/widgets/store_logo.dart';
 import 'bootstrap_provider.dart';
+import 'store_branding.dart';
 
 class SplashScreen extends ConsumerWidget {
   const SplashScreen({super.key});
@@ -18,6 +21,10 @@ class SplashScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bootstrap = ref.watch(bootstrapProvider);
+    final env = ref.watch(appEnvProvider);
+    final storeName = ref.watch(storeNameProvider);
+    final logoUrl = ref.watch(storeLogoUrlProvider);
+    final tagline = ref.watch(storeTaglineProvider);
 
     ref.listen(bootstrapProvider, (prev, next) {
       next.whenData((data) => _goHomeIfReady(context, data));
@@ -35,13 +42,29 @@ class SplashScreen extends ConsumerWidget {
 
     return Scaffold(
       body: bootstrap.when(
-        loading: () => const Center(
+        loading: () => Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Connecting to StoreFuse Bridge…'),
+              StoreLogo(
+                logoUrl: logoUrl,
+                height: 64,
+                fallback: Text(storeName, style: Theme.of(context).textTheme.headlineSmall),
+              ),
+              if (tagline != null) ...[
+                const SizedBox(height: 8),
+                Text(tagline, style: Theme.of(context).textTheme.bodyMedium),
+              ],
+              const SizedBox(height: 24),
+              const CircularProgressIndicator(),
+              if (!env.isProd) ...[
+                const SizedBox(height: 16),
+                Text(
+                  env.bridgeBaseUrl,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ],
           ),
         ),
@@ -65,7 +88,13 @@ class SplashScreen extends ConsumerWidget {
               onRetry: () => ref.read(bootstrapProvider.notifier).refresh(),
             );
           }
-          return const Center(child: CircularProgressIndicator());
+          return Center(
+            child: StoreLogo(
+              logoUrl: logoUrl,
+              height: 64,
+              fallback: Text(storeName, style: Theme.of(context).textTheme.headlineSmall),
+            ),
+          );
         },
       ),
     );

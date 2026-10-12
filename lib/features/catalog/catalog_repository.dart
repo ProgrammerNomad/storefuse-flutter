@@ -19,12 +19,14 @@ class CatalogRepository {
     int page = 1,
     int perPage = 20,
     String? category,
+    String? orderby,
   }) async {
     final client = await _client();
     final data = (await client.getProducts(
       page: page,
       perPage: perPage,
       category: category,
+      orderby: orderby,
     )).data;
     return asJsonList(data['items']);
   }
@@ -57,5 +59,10 @@ class CatalogRepository {
   Future<List<JsonMap>> posts({int page = 1}) async {
     final client = await _client();
     return asJsonList((await client.getPosts(page: page)).data['items']);
+  }
+
+  Future<JsonMap> notifyBackInStock({required String slug, required String email}) async {
+    final client = await _client();
+    return (await client.productNotifySignup(slug: slug, email: email)).data;
   }
 }

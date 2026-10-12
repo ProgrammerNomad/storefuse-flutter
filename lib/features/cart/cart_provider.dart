@@ -35,25 +35,24 @@ class CartNotifier extends Notifier<CartState> {
     return ref.read(apiClientProvider.future);
   }
 
+  Future<T> _withNonceRecovery<T>(Future<T> Function(StoreFuseApiClient client) action) async {
+    try {
+      final client = await _client();
+      return await action(client);
+    } on StoreFuseApiException catch (e) {
+      if (e.code != 'missing_wc_nonce') rethrow;
+      final client = await _client();
+      await client.bootstrapNonces();
+      return action(client);
+    }
+  }
+
   Future<void> refresh() async {
     state = state.copyWith(loading: true, error: null);
     try {
-      final client = await _client();
-      final cart = (await client.getCart()).data;
+      final cart = (await _withNonceRecovery((c) async => (await c.getCart()).data));
       state = CartState(data: cart);
     } on StoreFuseApiException catch (e) {
-      if (e.code == 'missing_wc_nonce') {
-        try {
-          final client = await _client();
-          await client.bootstrapNonces();
-          final cart = (await client.getCart()).data;
-          state = CartState(data: cart);
-          return;
-        } catch (e2) {
-          state = state.copyWith(loading: false, error: e2 is StoreFuseApiException ? e2 : e);
-          return;
-        }
-      }
       state = state.copyWith(loading: false, error: e);
     }
   }
@@ -65,16 +64,17 @@ class CartNotifier extends Notifier<CartState> {
   }) async {
     state = state.copyWith(loading: true, error: null);
     try {
-      final client = await _client();
-      if (client.nonces.wcNonce == null) {
-        await client.bootstrapNonces();
-      }
-      final body = <String, dynamic>{
-        'product_id': productId,
-        'quantity': quantity,
-        if (variationId != null) 'variation_id': variationId,
-      };
-      final cart = (await client.cartAdd(body)).data;
+      final cart = await _withNonceRecovery((client) async {
+        if (client.nonces.wcNonce == null) {
+          await client.bootstrapNonces();
+        }
+        final body = <String, dynamic>{
+          'product_id': productId,
+          'quantity': quantity,
+          if (variationId != null) 'variation_id': variationId,
+        };
+        return (await client.cartAdd(body)).data;
+      });
       state = CartState(data: cart);
     } on StoreFuseApiException catch (e) {
       state = state.copyWith(loading: false, error: e);
@@ -85,8 +85,9 @@ class CartNotifier extends Notifier<CartState> {
   Future<void> updateLine({required String key, required int quantity}) async {
     state = state.copyWith(loading: true, error: null);
     try {
-      final client = await _client();
-      final cart = (await client.cartUpdate({'key': key, 'quantity': quantity})).data;
+      final cart = await _withNonceRecovery(
+        (client) async => (await client.cartUpdate({'key': key, 'quantity': quantity})).data,
+      );
       state = CartState(data: cart);
     } on StoreFuseApiException catch (e) {
       state = state.copyWith(loading: false, error: e);
@@ -97,8 +98,9 @@ class CartNotifier extends Notifier<CartState> {
   Future<void> removeLine(String key) async {
     state = state.copyWith(loading: true, error: null);
     try {
-      final client = await _client();
-      final cart = (await client.cartRemove({'key': key})).data;
+      final cart = await _withNonceRecovery(
+        (client) async => (await client.cartRemove({'key': key})).data,
+      );
       state = CartState(data: cart);
     } on StoreFuseApiException catch (e) {
       state = state.copyWith(loading: false, error: e);

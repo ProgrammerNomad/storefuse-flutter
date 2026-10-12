@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/providers/providers.dart';
 import '../../core/models/json_helpers.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/error_view.dart';
@@ -69,11 +70,17 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               PriceText(price: asJsonMap(p['price'])),
               const SizedBox(height: 8),
               Text(inStock ? 'In stock' : 'Out of stock'),
+              if (!inStock && modules['products'] == true)
+                _NotifyWhenAvailable(slug: widget.slug),
               if (p['description'] != null) ...[
                 const SizedBox(height: 16),
                 Text(p['description'].toString()),
               ],
               const SizedBox(height: 24),
+              if (!inStock && modules['products'] == true) ...[
+                const SizedBox(height: 16),
+                _BackInStockNotify(slug: widget.slug),
+              ],
               FilledButton(
                 onPressed: !inStock
                     ? null
@@ -146,6 +153,145 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       }
     }
     return null;
+  }
+}
+
+class _BackInStockNotify extends ConsumerStatefulWidget {
+  const _BackInStockNotify({required this.slug});
+
+  final String slug;
+
+  @override
+  ConsumerState<_BackInStockNotify> createState() => _BackInStockNotifyState();
+}
+
+class _BackInStockNotifyState extends ConsumerState<_BackInStockNotify> {
+  final _email = TextEditingController();
+  var _consent = false;
+  var _submitting = false;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Notify me when back in stock', style: Theme.of(context).textTheme.titleSmall),
+        TextField(
+          controller: _email,
+          decoration: const InputDecoration(labelText: 'Email'),
+          keyboardType: TextInputType.emailAddress,
+        ),
+        CheckboxListTile(
+          value: _consent,
+          onChanged: (v) => setState(() => _consent = v ?? false),
+          title: const Text('I agree to receive back-in-stock emails'),
+          controlAffinity: ListTileControlAffinity.leading,
+          contentPadding: EdgeInsets.zero,
+        ),
+        FilledButton.tonal(
+          onPressed: !_consent || _submitting
+              ? null
+              : () async {
+                  setState(() => _submitting = true);
+                  try {
+                    final client = await ref.read(apiClientProvider.future);
+                    final result = (await client.productNotifySignup(
+                      slug: widget.slug,
+                      email: _email.text.trim(),
+                      consent: _consent,
+                    )).data;
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            result['message']?.toString() ?? 'You will be notified.',
+                          ),
+                        ),
+                      );
+                    }
+                  } on StoreFuseApiException catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(e.message)),
+                      );
+                    }
+                  } finally {
+                    if (mounted) setState(() => _submitting = false);
+                  }
+                },
+          child: const Text('Notify me'),
+        ),
+      ],
+    );
+  }
+}
+
+class _NotifyWhenAvailable extends ConsumerStatefulWidget {
+  const _NotifyWhenAvailable({required this.slug});
+
+  final String slug;
+
+  @override
+  ConsumerState<_NotifyWhenAvailable> createState() => _NotifyWhenAvailableState();
+}
+
+class _NotifyWhenAvailableState extends ConsumerState<_NotifyWhenAvailable> {
+  final _email = TextEditingController();
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Notify me when back in stock', style: Theme.of(context).textTheme.titleSmall),
+          TextField(
+            controller: _email,
+            decoration: const InputDecoration(labelText: 'Email'),
+            keyboardType: TextInputType.emailAddress,
+          ),
+          FilledButton(
+            onPressed: _submitting
+                ? null
+                : () async {
+                    setState(() => _submitting = true);
+                    try {
+                      await ref.read(catalogRepositoryProvider).notifyBackInStock(
+                            slug: widget.slug,
+                            email: _email.text.trim(),
+                          );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('You will be notified when this is back in stock.')),
+                        );
+                      }
+                    } on StoreFuseApiException catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+                      }
+                    } finally {
+                      if (mounted) setState(() => _submitting = false);
+                    }
+                  },
+            child: const Text('Notify me'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

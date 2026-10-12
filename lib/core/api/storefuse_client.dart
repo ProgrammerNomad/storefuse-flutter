@@ -22,8 +22,8 @@ class StoreFuseApiClient {
   })  : _dio = dio ?? Dio(),
         _cookieJar = cookieJar {
     _dio.options.baseUrl = env.apiBaseUrl;
-    _dio.options.connectTimeout = const Duration(seconds: 30);
-    _dio.options.receiveTimeout = const Duration(seconds: 30);
+    _dio.options.connectTimeout = env.connectTimeout;
+    _dio.options.receiveTimeout = env.receiveTimeout;
     _dio.options.headers['Accept'] = 'application/json';
     if (_cookieJar != null) {
       _dio.interceptors.add(CookieManager(_cookieJar!));
@@ -179,11 +179,18 @@ class StoreFuseApiClient {
   }
 
   StoreFuseApiException _mapDioError(DioException e) {
-    if (e.error is SocketException ||
+    final connectionFailed = e.error is SocketException ||
         e.type == DioExceptionType.connectionError ||
-        e.type == DioExceptionType.connectionTimeout) {
+        e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.sendTimeout;
+    if (connectionFailed) {
+      final devHint = env.isProd
+          ? ''
+          : ' Cannot reach store at ${env.bridgeBaseUrl}. '
+              'Start XAMPP (Apache) and on Android emulator use http://10.0.2.2.';
       return StoreFuseApiException(
-        message: 'You appear to be offline. Check your connection.',
+        message: 'You appear to be offline. Check your connection.$devHint',
         isOffline: true,
       );
     }
@@ -219,6 +226,7 @@ class StoreFuseApiClient {
     int perPage = 20,
     String? category,
     String? tag,
+    String? orderby,
   }) async {
     final json = await _getEnvelope(
       '/products',
@@ -227,6 +235,7 @@ class StoreFuseApiClient {
         'per_page': perPage,
         if (category != null) 'category': category,
         if (tag != null) 'tag': tag,
+        if (orderby != null) 'orderby': orderby,
       },
       useCache: true,
     );
@@ -527,6 +536,23 @@ class StoreFuseApiClient {
 
   Future<EnvelopeResult<JsonMap>> lookupPincode(String pincode) async {
     final json = await _getEnvelope('/utils/pincode/$pincode');
+    return EnvelopeParser.parseSuccess(json, (d) => d);
+  }
+
+  Future<EnvelopeResult<JsonMap>> productNotifySignup({
+    required String slug,
+    required String email,
+    bool consent = true,
+  }) async {
+    final json = await _mutateEnvelope(
+      '/products/$slug/notify',
+      method: 'POST',
+      data: {
+        'email': email,
+        'consent': consent,
+        'website': '',
+      },
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 }
