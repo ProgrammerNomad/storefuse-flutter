@@ -6,7 +6,7 @@ Flutter does **not** share cookies with the user’s browser. Implement a **pers
 
 **Cart session:** Use a **cookie jar** as the primary path. **`X-StoreFuse-Cart-Token`** signed restore is **experimental** until [Bridge cart-token-restore.md](https://github.com/ProgrammerNomad/storefuse-bridge/blob/main/docs/cart-token-restore.md) passes on your site. The header is not a login token.
 
-**Canonical auth roadmap (cookies, Application Passwords, future JWT):** [StoreFuse Bridge auth-strategy.md](https://github.com/ProgrammerNomad/storefuse-bridge/blob/main/docs/auth-strategy.md) — do not duplicate that document here.
+**Canonical auth roadmap (cookies, Application Passwords, future JWT):** [StoreFuse Bridge auth-strategy.md](https://github.com/ProgrammerNomad/storefuse-bridge/blob/main/docs/auth-strategy.md) - do not duplicate that document here.
 
 Contrast with Next.js: [Bridge mobile-flutter client guide](https://github.com/ProgrammerNomad/storefuse-bridge/blob/main/docs/clients/mobile-flutter.md).
 
