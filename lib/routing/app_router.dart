@@ -24,8 +24,14 @@ import '../features/checkout/order_confirmation_screen.dart';
 import '../features/orders/order_detail_screen.dart';
 import '../features/orders/order_list_screen.dart';
 import '../features/search/search_screen.dart';
+import '../features/account/change_password_screen.dart';
+import '../features/account/edit_profile_screen.dart';
+import '../features/settings/about_screen.dart';
+import '../features/settings/settings_screen.dart';
+import 'main_shell.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
+final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final env = AppEnv.fromDartDefines();
@@ -34,8 +40,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: '/',
     routes: [
       GoRoute(path: '/', builder: (_, __) => const SplashScreen()),
-      GoRoute(path: '/home', builder: (_, __) => const HomeScreen()),
-      GoRoute(path: '/products', builder: (_, __) => const ProductListScreen()),
+      ShellRoute(
+        navigatorKey: _shellNavigatorKey,
+        builder: (context, state, child) => MainShell(child: child),
+        routes: [
+          GoRoute(path: '/home', builder: (_, __) => const HomeScreen()),
+          GoRoute(path: '/products', builder: (_, __) => const ProductListScreen()),
+          GoRoute(path: '/search', builder: (_, __) => const SearchScreen()),
+          GoRoute(path: '/cart', builder: (_, __) => const CartScreen()),
+          GoRoute(path: '/account', builder: (_, __) => const AccountScreen()),
+        ],
+      ),
       GoRoute(
         path: '/products/:slug',
         builder: (_, state) => ProductDetailScreen(slug: state.pathParameters['slug']!),
@@ -49,13 +64,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/categories/:slug',
         builder: (_, state) => CategoryDetailScreen(slug: state.pathParameters['slug']!),
       ),
-      GoRoute(path: '/search', builder: (_, __) => const SearchScreen()),
       GoRoute(path: '/posts', builder: (_, __) => const PostsScreen()),
       GoRoute(
         path: '/posts/:slug',
         builder: (_, state) => PostDetailScreen(slug: state.pathParameters['slug']!),
       ),
-      GoRoute(path: '/cart', builder: (_, __) => const CartScreen()),
       GoRoute(path: '/checkout', builder: (_, __) => const CheckoutScreen()),
       GoRoute(
         path: '/orders/confirm/:key',
@@ -70,10 +83,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return OrderDetailScreen(orderId: id);
         },
       ),
-      GoRoute(path: '/account', builder: (_, __) => const AccountScreen()),
+      GoRoute(path: '/account/edit-profile', builder: (_, __) => const EditProfileScreen()),
+      GoRoute(path: '/account/change-password', builder: (_, __) => const ChangePasswordScreen()),
       GoRoute(path: '/account/addresses', builder: (_, __) => const AddressesScreen()),
       GoRoute(path: '/account/wishlist', builder: (_, __) => const WishlistScreen()),
       GoRoute(path: '/account/downloads', builder: (_, __) => const DownloadsScreen()),
+      GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+      GoRoute(path: '/settings/about', builder: (_, __) => const AboutScreen()),
       GoRoute(path: '/auth/login', builder: (_, __) => const LoginScreen()),
       GoRoute(path: '/auth/register', builder: (_, __) => const RegisterScreen()),
       GoRoute(path: '/auth/forgot-password', builder: (_, __) => const ForgotPasswordScreen()),
@@ -87,11 +103,25 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ],
     redirect: (context, state) {
       final uri = state.uri;
-      if (uri.scheme == env.deepLinkScheme && uri.host == 'reset') {
-        return Uri(
-          path: '/auth/reset-password',
-          queryParameters: uri.queryParameters,
-        ).toString();
+      if (uri.scheme == env.deepLinkScheme) {
+        if (uri.host == 'reset') {
+          return Uri(
+            path: '/auth/reset-password',
+            queryParameters: uri.queryParameters,
+          ).toString();
+        }
+        if (uri.host == 'product' && uri.pathSegments.isNotEmpty) {
+          return '/products/${uri.pathSegments.first}';
+        }
+        if (uri.host == 'products' && uri.pathSegments.isNotEmpty) {
+          return '/products/${uri.pathSegments.first}';
+        }
+        if (uri.host == 'category' && uri.pathSegments.isNotEmpty) {
+          return '/categories/${uri.pathSegments.first}';
+        }
+        if (uri.host == 'categories' && uri.pathSegments.isNotEmpty) {
+          return '/categories/${uri.pathSegments.first}';
+        }
       }
       return null;
     },

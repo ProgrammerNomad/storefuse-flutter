@@ -3,8 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/models/json_helpers.dart';
+import '../../core/models/order.dart';
+import '../../core/ui/show_store_error.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/error_view.dart';
+import '../../core/widgets/order_status_badge.dart';
 import '../cart/cart_provider.dart';
 import 'orders_repository.dart';
 
@@ -48,60 +52,84 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
               onRetry: _reload,
             );
           }
-          final order = snapshot.data!;
+          final order = Order.fromJson(snapshot.data!);
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text('Order #${order['number'] ?? order['id']}'),
-              Text('Status: ${order['status']}'),
+              Text('Order #${order.number}', style: Theme.of(context).textTheme.titleLarge),
+              OrderStatusBadge(status: order.status ?? ''),
+              if (order.dateCreated != null) Text(order.dateCreated!),
+              if (order.totalFormatted != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text('Total: ${order.totalFormatted}'),
+                ),
+              const SizedBox(height: 16),
+              Text('Items', style: Theme.of(context).textTheme.titleMedium),
+              ...order.lineItems.map(
+                (line) => ListTile(
+                  title: Text(line.name),
+                  subtitle: Text('Qty ${line.quantity}'),
+                  trailing: Text(line.totalFormatted ?? ''),
+                ),
+              ),
+              if (order.billing != null) ...[
+                const SizedBox(height: 16),
+                Text('Billing', style: Theme.of(context).textTheme.titleMedium),
+                Text(_formatAddress(order.billing!)),
+              ],
+              if (order.shipping != null) ...[
+                const SizedBox(height: 16),
+                Text('Shipping', style: Theme.of(context).textTheme.titleMedium),
+                Text(_formatAddress(order.shipping!)),
+              ],
               const SizedBox(height: 16),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  OutlinedButton(
-                    onPressed: () async {
-                      try {
-                        await ref.read(ordersRepositoryProvider).cancel(widget.orderId);
-                        await _reload();
-                      } on StoreFuseApiException catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(e.message)),
+                  if (_canCancel(order.status ?? ''))
+                    OutlinedButton(
+                      onPressed: () async {
+                        final ok = await showConfirmDialog(
+                          context,
+                          title: 'Cancel order?',
+                          message: 'This will request cancellation for this order.',
                         );
-                      }
-                    },
-                    child: const Text('Cancel'),
-                  ),
+                        if (!ok || !context.mounted) return;
+                        try {
+                          await ref.read(ordersRepositoryProvider).cancel(widget.orderId);
+                          await _reload();
+                        } on StoreFuseApiException catch (e) {
+                          SnackBarHelper.showException(context, e);
+                        }
+                      },
+                      child: const Text('Cancel'),
+                    ),
                   OutlinedButton(
                     onPressed: () async {
                       try {
                         await ref.read(ordersRepositoryProvider).reorder(widget.orderId);
                         await ref.read(cartProvider.notifier).refresh();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Items added to cart')),
-                        );
+                        SnackBarHelper.showMessage(context, 'Items added to cart');
                       } on StoreFuseApiException catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(e.message)),
-                        );
+                        SnackBarHelper.showException(context, e);
                       }
                     },
                     child: const Text('Reorder'),
                   ),
                   OutlinedButton(
                     onPressed: () async {
+                      final reason = await _promptReturnReason(context);
+                      if (reason == null || !context.mounted) return;
                       try {
                         await ref.read(ordersRepositoryProvider).returnRequest(
                               widget.orderId,
-                              reason: 'App return request',
+                              reason: reason,
                             );
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Return requested')),
-                        );
+                        SnackBarHelper.showMessage(context, 'Return requested');
                       } on StoreFuseApiException catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(e.message)),
-                        );
+                        SnackBarHelper.showException(context, e);
                       }
                     },
                     child: const Text('Return'),
@@ -109,48 +137,20 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                   OutlinedButton(
                     onPressed: () async {
                       try {
-                        final t = await ref
-                            .read(ordersRepositoryProvider)
-                            .tracking(widget.orderId);
-                        if (context.mounted) {
-                          showDialog<void>(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              title: const Text('Tracking'),
-                              content: Text(t.toString()),
-                            ),
-                          );
-                        }
-                      } on StoreFuseApiException catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(e.message)),
+                        final t = await ref.read(ordersRepositoryProvider).tracking(widget.orderId);
+                        if (!context.mounted) return;
+                        await showDialog<void>(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            title: const Text('Tracking'),
+                            content: Text(_trackingText(t)),
+                          ),
                         );
+                      } on StoreFuseApiException catch (e) {
+                        SnackBarHelper.showException(context, e);
                       }
                     },
                     child: const Text('Tracking'),
-                  ),
-                  OutlinedButton(
-                    onPressed: () async {
-                      try {
-                        final inv = await ref
-                            .read(ordersRepositoryProvider)
-                            .invoice(widget.orderId);
-                        if (context.mounted) {
-                          showDialog<void>(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              title: const Text('Invoice'),
-                              content: Text(inv.toString()),
-                            ),
-                          );
-                        }
-                      } on StoreFuseApiException catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(e.message)),
-                        );
-                      }
-                    },
-                    child: const Text('Invoice'),
                   ),
                 ],
               ),
@@ -159,5 +159,52 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
         },
       ),
     );
+  }
+
+  bool _canCancel(String status) {
+    final s = status.toLowerCase();
+    return s == 'pending' || s == 'processing' || s == 'on-hold';
+  }
+
+  String _formatAddress(JsonMap a) {
+    return [
+      a['first_name'],
+      a['last_name'],
+      a['address_1'],
+      a['city'],
+      a['postcode'],
+      a['country'],
+    ].whereType<String>().where((s) => s.isNotEmpty).join(', ');
+  }
+
+  String _trackingText(JsonMap t) {
+    final url = t['url']?.toString();
+    final provider = t['provider']?.toString();
+    final number = t['tracking_number']?.toString() ?? t['number']?.toString();
+    return [provider, number, url].whereType<String>().where((s) => s.isNotEmpty).join('\n');
+  }
+
+  Future<String?> _promptReturnReason(BuildContext context) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Return reason'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Why are you returning?'),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
   }
 }

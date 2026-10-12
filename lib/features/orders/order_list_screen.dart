@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/models/json_helpers.dart';
 import '../../core/widgets/app_scaffold.dart';
-import '../../core/widgets/error_view.dart';
+import '../../core/widgets/paginated_list_view.dart';
+import '../../core/widgets/order_status_badge.dart';
 import '../auth/auth_session_provider.dart';
 import 'orders_repository.dart';
 
@@ -16,17 +18,7 @@ class OrderListScreen extends ConsumerStatefulWidget {
 }
 
 class _OrderListScreenState extends ConsumerState<OrderListScreen> {
-  late Future<List<JsonMap>> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  void _load() {
-    _future = ref.read(ordersRepositoryProvider).list();
-  }
+  final _listKey = GlobalKey<PaginatedListViewState>();
 
   @override
   Widget build(BuildContext context) {
@@ -46,35 +38,34 @@ class _OrderListScreenState extends ConsumerState<OrderListScreen> {
 
     return AppScaffold(
       title: 'Orders',
-      body: FutureBuilder<List<JsonMap>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return ErrorView(
-              message: snapshot.error.toString(),
-              onRetry: () => setState(_load),
+      body: RefreshIndicator(
+        onRefresh: () async => _listKey.currentState?.refresh(),
+        child: PaginatedListView(
+          key: _listKey,
+          physics: const AlwaysScrollableScrollPhysics(),
+          emptyTitle: 'No orders yet',
+          loadPage: (page) => ref.read(ordersRepositoryProvider).listPage(page: page),
+          itemBuilder: (context, o, _) {
+            final id = parseInt(o['id']);
+            final date = o['date_created']?.toString();
+            String? formattedDate;
+            if (date != null) {
+              final parsed = DateTime.tryParse(date);
+              if (parsed != null) {
+                formattedDate = DateFormat.yMMMd().format(parsed);
+              }
+            }
+            return ListTile(
+              title: Text('Order #${o['number'] ?? id}'),
+              subtitle: Text([
+                if (formattedDate != null) formattedDate,
+                asJsonMap(o['total'])?['formatted']?.toString(),
+              ].whereType<String>().join(' · ')),
+              trailing: OrderStatusBadge(status: o['status']?.toString() ?? ''),
+              onTap: () => context.push('/orders/$id'),
             );
-          }
-          final items = snapshot.data ?? const [];
-          if (items.isEmpty) {
-            return const Center(child: Text('No orders yet.'));
-          }
-          return ListView.builder(
-            itemCount: items.length,
-            itemBuilder: (context, index) {
-              final o = items[index];
-              final id = parseInt(o['id']);
-              return ListTile(
-                title: Text('Order #${o['number'] ?? id}'),
-                subtitle: Text(o['status']?.toString() ?? ''),
-                onTap: () => context.push('/orders/$id'),
-              );
-            },
-          );
-        },
+          },
+        ),
       ),
     );
   }

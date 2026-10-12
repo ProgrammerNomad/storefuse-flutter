@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/widgets/error_view.dart';
+import '../../core/widgets/loading_button.dart';
 import 'auth_repository.dart';
 import 'auth_session_provider.dart';
 
@@ -15,9 +16,11 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
-  bool _loading = false;
+  var _obscure = true;
+  var _loading = false;
   StoreFuseApiException? _error;
 
   @override
@@ -28,6 +31,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -50,40 +54,47 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Sign in')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (_error != null) ErrorView.fromException(_error!),
-          TextField(
-            controller: _email,
-            decoration: const InputDecoration(labelText: 'Email'),
-            keyboardType: TextInputType.emailAddress,
-          ),
-          TextField(
-            controller: _password,
-            decoration: const InputDecoration(labelText: 'Password'),
-            obscureText: true,
-          ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: _loading ? null : _submit,
-            child: _loading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Sign in'),
-          ),
-          TextButton(
-            onPressed: () => context.push('/auth/forgot-password'),
-            child: const Text('Forgot password?'),
-          ),
-          TextButton(
-            onPressed: () => context.push('/auth/register'),
-            child: const Text('Create account'),
-          ),
-        ],
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (_error != null) ErrorView.fromException(_error!),
+            TextFormField(
+              controller: _email,
+              decoration: const InputDecoration(labelText: 'Email'),
+              keyboardType: TextInputType.emailAddress,
+              validator: (v) {
+                final t = v?.trim() ?? '';
+                if (t.isEmpty) return 'Email is required';
+                if (!t.contains('@')) return 'Enter a valid email';
+                return null;
+              },
+            ),
+            TextFormField(
+              controller: _password,
+              decoration: InputDecoration(
+                labelText: 'Password',
+                suffixIcon: IconButton(
+                  icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                ),
+              ),
+              obscureText: _obscure,
+              validator: (v) => (v == null || v.isEmpty) ? 'Password is required' : null,
+            ),
+            const SizedBox(height: 16),
+            LoadingButton(label: 'Sign in', loading: _loading, onPressed: _submit),
+            TextButton(
+              onPressed: () => context.push('/auth/forgot-password'),
+              child: const Text('Forgot password?'),
+            ),
+            TextButton(
+              onPressed: () => context.push('/auth/register'),
+              child: const Text('Create account'),
+            ),
+          ],
+        ),
       ),
     );
   }

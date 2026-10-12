@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/models/order.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/error_view.dart';
+import '../../core/widgets/order_status_badge.dart';
 import '../orders/orders_repository.dart';
 
 class OrderConfirmationScreen extends ConsumerStatefulWidget {
@@ -43,22 +45,37 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
               }),
             );
           }
-          final order = snapshot.data!;
+          final order = Order.fromJson(snapshot.data!);
           return Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Thank you!',
-                  style: Theme.of(context).textTheme.headlineSmall,
+                Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary, size: 56),
+                Text('Thank you!', style: Theme.of(context).textTheme.headlineSmall),
+                Text('Order #${order.number}'),
+                OrderStatusBadge(status: order.status ?? ''),
+                if (order.totalFormatted != null) Text('Total: ${order.totalFormatted}'),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: ListView(
+                    children: order.lineItems
+                        .map(
+                          (line) => ListTile(
+                            title: Text(line.name),
+                            subtitle: Text('Qty ${line.quantity}'),
+                            trailing: Text(line.totalFormatted ?? ''),
+                          ),
+                        )
+                        .toList(),
+                  ),
                 ),
-                Text('Order #${order['number'] ?? order['id']}'),
-                Text('Status: ${order['status']}'),
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: () => context.go('/home'),
-                  child: const Text('Continue shopping'),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => context.go('/home'),
+                    child: const Text('Continue shopping'),
+                  ),
                 ),
               ],
             ),

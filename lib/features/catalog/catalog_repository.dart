@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/storefuse_client.dart' show StoreFuseApiClient;
 import '../../core/models/json_helpers.dart';
+import '../../core/models/paginated_result.dart';
 import '../../core/providers/providers.dart';
 
 final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
@@ -21,6 +22,21 @@ class CatalogRepository {
     String? category,
     String? orderby,
   }) async {
+    final pageResult = await productsPage(
+      page: page,
+      perPage: perPage,
+      category: category,
+      orderby: orderby,
+    );
+    return pageResult.items;
+  }
+
+  Future<PaginatedResult<JsonMap>> productsPage({
+    int page = 1,
+    int perPage = 20,
+    String? category,
+    String? orderby,
+  }) async {
     final client = await _client();
     final data = (await client.getProducts(
       page: page,
@@ -28,7 +44,7 @@ class CatalogRepository {
       category: category,
       orderby: orderby,
     )).data;
-    return asJsonList(data['items']);
+    return PaginatedResult.jsonMaps(data);
   }
 
   Future<JsonMap> productBySlug(String slug) async {
@@ -47,8 +63,17 @@ class CatalogRepository {
   }
 
   Future<List<JsonMap>> searchProducts(String q) async {
+    return (await searchPage(q: q)).items;
+  }
+
+  Future<PaginatedResult<JsonMap>> searchPage({
+    required String q,
+    int page = 1,
+    int perPage = 20,
+  }) async {
     final client = await _client();
-    return asJsonList((await client.search(q: q)).data['items']);
+    final data = (await client.search(q: q, page: page, perPage: perPage)).data;
+    return PaginatedResult.jsonMaps(data);
   }
 
   Future<List<JsonMap>> reviews(int productId) async {
@@ -57,8 +82,13 @@ class CatalogRepository {
   }
 
   Future<List<JsonMap>> posts({int page = 1}) async {
+    return (await postsPage(page: page)).items;
+  }
+
+  Future<PaginatedResult<JsonMap>> postsPage({int page = 1}) async {
     final client = await _client();
-    return asJsonList((await client.getPosts(page: page)).data['items']);
+    final data = (await client.getPosts(page: page)).data;
+    return PaginatedResult.jsonMaps(data);
   }
 
   Future<JsonMap> notifyBackInStock({required String slug, required String email}) async {

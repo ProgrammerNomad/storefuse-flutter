@@ -75,4 +75,30 @@ class ListMeta {
       totalPages: parseInt(meta['total_pages']),
     );
   }
+
+  factory ListMeta.fromPageData(JsonMap data) {
+    final nested = asJsonMap(data['meta']);
+    if (nested != null &&
+        (nested.containsKey('page') ||
+            nested.containsKey('total') ||
+            nested.containsKey('total_pages'))) {
+      return ListMeta.fromJson(nested);
+    }
+    return ListMeta.fromJson(data);
+  }
+}
+
+@immutable
+class PaginatedListResult {
+  const PaginatedListResult({required this.items, required this.meta});
+
+  final List<JsonMap> items;
+  final ListMeta meta;
+
+  factory PaginatedListResult.fromJson(JsonMap data) {
+    return PaginatedListResult(
+      items: asJsonList(data['items']),
+      meta: ListMeta.fromPageData(data),
+    );
+  }
 }

@@ -1,3 +1,5 @@
+// Storefront Riverpod providers - do not duplicate provider names elsewhere.
+// Storefront Riverpod providers - single source of truth (do not duplicate names elsewhere).
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/json_helpers.dart';

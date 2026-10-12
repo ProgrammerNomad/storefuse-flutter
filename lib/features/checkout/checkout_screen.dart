@@ -5,10 +5,14 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/json_helpers.dart';
 import '../../core/providers/providers.dart';
+import '../../core/ui/show_store_error.dart' show SnackBarHelper;
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/address_fields.dart';
 import '../../core/widgets/error_view.dart';
+import '../../core/widgets/loading_button.dart';
+import '../auth/auth_session_provider.dart';
 import '../bootstrap/bootstrap_provider.dart';
+import '../cart/cart_provider.dart';
 import 'checkout_webview_screen.dart';
 
 class CheckoutScreen extends ConsumerStatefulWidget {
@@ -95,11 +99,7 @@ class _RedirectCheckout extends ConsumerWidget {
                     ),
                   );
                 } on StoreFuseApiException catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(e.message)),
-                    );
-                  }
+                  SnackBarHelper.showException(context, e);
                 }
               },
               child: const Text('Continue to checkout'),
@@ -121,6 +121,7 @@ class _HeadlessCheckoutForm extends ConsumerStatefulWidget {
 }
 
 class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
+  final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _firstName = TextEditingController();
   final _lastName = TextEditingController();
@@ -128,8 +129,29 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
   final _city = TextEditingController();
   final _postcode = TextEditingController();
   final _state = TextEditingController();
-  final _country = ValueNotifier<String>('IN');
+  final _notes = TextEditingController();
+  final _country = ValueNotifier<String>('');
+  bool _sameAsBilling = true;
+  bool _acceptedTerms = false;
   bool _submitting = false;
+  bool _loadingMethods = true;
+
+  List<JsonMap> _paymentMethods = const [];
+  List<JsonMap> _shippingMethods = const [];
+  String? _paymentMethodId;
+  String? _shippingMethodId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPaymentMethods();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final defaultCountry = widget.config['default_country']?.toString();
+      if (defaultCountry != null && defaultCountry.isNotEmpty) {
+        _country.value = defaultCountry;
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -140,38 +162,101 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
     _city.dispose();
     _postcode.dispose();
     _state.dispose();
+    _notes.dispose();
     _country.dispose();
     super.dispose();
   }
 
+  JsonMap _billingPayload() {
+    final country = _country.value.trim();
+    return {
+      'email': _email.text.trim(),
+      'first_name': _firstName.text.trim(),
+      'last_name': _lastName.text.trim(),
+      'address_1': _address1.text.trim(),
+      'city': _city.text.trim(),
+      'postcode': _postcode.text.trim(),
+      'state': _state.text.trim(),
+      'country': country.isEmpty ? 'IN' : country,
+    };
+  }
+
+  Future<void> _loadPaymentMethods() async {
+    setState(() => _loadingMethods = true);
+    try {
+      final client = await ref.read(apiClientProvider.future);
+      final data = (await client.getPaymentMethods()).data;
+      final methods = asJsonList(data['methods'] ?? data['payment_methods'] ?? data['items']);
+      setState(() {
+        _paymentMethods = methods;
+        _paymentMethodId = methods.isNotEmpty
+            ? methods.first['id']?.toString()
+            : null;
+        _loadingMethods = false;
+      });
+    } on StoreFuseApiException catch (e) {
+      if (mounted) SnackBarHelper.showException(context, e);
+      setState(() => _loadingMethods = false);
+    }
+  }
+
+  Future<void> _loadShippingMethods() async {
+    try {
+      final client = await ref.read(apiClientProvider.future);
+      if (client.nonces.wcNonce == null) {
+        await client.bootstrapNonces();
+      }
+      final billing = _billingPayload();
+      final data = (await client.getShippingMethods(address: billing)).data;
+      final methods = asJsonList(data['methods'] ?? data['shipping_methods'] ?? data['items']);
+      setState(() {
+        _shippingMethods = methods;
+        _shippingMethodId = methods.isNotEmpty
+            ? methods.first['id']?.toString()
+            : null;
+      });
+    } on StoreFuseApiException catch (e) {
+      if (mounted) SnackBarHelper.showException(context, e);
+    }
+  }
+
   Future<void> _placeOrder() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (!_acceptedTerms) {
+      SnackBarHelper.showMessage(context, 'Please accept the terms to continue.');
+      return;
+    }
+    if (_paymentMethodId == null || _paymentMethodId!.isEmpty) {
+      SnackBarHelper.showMessage(context, 'Select a payment method.');
+      return;
+    }
+    if (_shippingMethods.isNotEmpty &&
+        (_shippingMethodId == null || _shippingMethodId!.isEmpty)) {
+      SnackBarHelper.showMessage(context, 'Select a shipping method.');
+      return;
+    }
+
     setState(() => _submitting = true);
     try {
       final client = await ref.read(apiClientProvider.future);
       if (client.nonces.wcNonce == null) {
         await client.bootstrapNonces();
       }
+      final billing = _billingPayload();
+      final shipping = _sameAsBilling ? billing : billing;
       final result = (await client.checkoutHeadless({
-        'billing': {
-          'email': _email.text.trim(),
-          'first_name': _firstName.text.trim(),
-          'last_name': _lastName.text.trim(),
-          'address_1': _address1.text.trim(),
-          'city': _city.text.trim(),
-          'postcode': _postcode.text.trim(),
-          'state': _state.text.trim(),
-          'country': _country.value.trim().isEmpty ? 'IN' : _country.value.trim(),
-        },
-        'payment_method': 'cod',
+        'billing': billing,
+        'shipping': shipping,
+        'payment_method': _paymentMethodId,
+        if (_shippingMethodId != null) 'shipping_method': [_shippingMethodId],
+        if (_notes.text.trim().isNotEmpty) 'order_comments': _notes.text.trim(),
       })).data;
       final key = result['order_key']?.toString() ?? result['key']?.toString();
       if (key != null && context.mounted) {
         context.go('/orders/confirm/$key');
       }
     } on StoreFuseApiException catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-      }
+      SnackBarHelper.showException(context, e);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -179,31 +264,144 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        TextField(controller: _email, decoration: const InputDecoration(labelText: 'Email')),
-        TextField(controller: _firstName, decoration: const InputDecoration(labelText: 'First name')),
-        TextField(controller: _lastName, decoration: const InputDecoration(labelText: 'Last name')),
-        TextField(controller: _address1, decoration: const InputDecoration(labelText: 'Address')),
-        AddressFields(
-          countryController: _country,
-          postcodeController: _postcode,
-          cityController: _city,
-          stateController: _state,
-        ),
-        const SizedBox(height: 16),
-        FilledButton(
-          onPressed: _submitting ? null : _placeOrder,
-          child: _submitting
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Place order'),
-        ),
-      ],
+    final loggedIn = ref.watch(isLoggedInProvider);
+    final cart = ref.watch(cartProvider).data;
+    final lines = asJsonList(cart?['items']);
+
+    if (_loadingMethods) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Form(
+      key: _formKey,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (!loggedIn)
+            Card(
+              child: ListTile(
+                title: const Text('Have an account?'),
+                subtitle: const Text('Sign in for faster checkout'),
+                trailing: TextButton(
+                  onPressed: () => context.push('/auth/login'),
+                  child: const Text('Sign in'),
+                ),
+              ),
+            ),
+          if (lines.isNotEmpty) ...[
+            Text('Order summary', style: Theme.of(context).textTheme.titleMedium),
+            ...lines.map((line) {
+              return ListTile(
+                dense: true,
+                title: Text(line['name']?.toString() ?? 'Item'),
+                subtitle: Text('Qty ${line['quantity'] ?? 1}'),
+                trailing: Text(
+                  asJsonMap(line['totals'])?['formatted']?.toString() ??
+                      priceFormatted(asJsonMap(line['price'])),
+                ),
+              );
+            }),
+            if (cart?['totals'] != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'Total: ${asJsonMap(cart!['totals'])?['total']?['formatted'] ?? ''}',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+            const Divider(),
+          ],
+          TextFormField(
+            controller: _email,
+            decoration: const InputDecoration(labelText: 'Email'),
+            keyboardType: TextInputType.emailAddress,
+            validator: (v) {
+              final t = v?.trim() ?? '';
+              if (t.isEmpty) return 'Email is required';
+              if (!t.contains('@')) return 'Enter a valid email';
+              return null;
+            },
+          ),
+          TextFormField(
+            controller: _firstName,
+            decoration: const InputDecoration(labelText: 'First name'),
+            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+          ),
+          TextFormField(
+            controller: _lastName,
+            decoration: const InputDecoration(labelText: 'Last name'),
+            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+          ),
+          TextFormField(
+            controller: _address1,
+            decoration: const InputDecoration(labelText: 'Address'),
+            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+          ),
+          AddressFields(
+            countryController: _country,
+            postcodeController: _postcode,
+            cityController: _city,
+            stateController: _state,
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _loadShippingMethods,
+              child: const Text('Load shipping options'),
+            ),
+          ),
+          SwitchListTile(
+            value: _sameAsBilling,
+            onChanged: (v) => setState(() => _sameAsBilling = v),
+            title: const Text('Shipping same as billing'),
+          ),
+          if (_paymentMethods.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Payment method', style: Theme.of(context).textTheme.titleSmall),
+            ..._paymentMethods.map((m) {
+              final id = m['id']?.toString() ?? '';
+              return RadioListTile<String>(
+                value: id,
+                groupValue: _paymentMethodId,
+                onChanged: (v) => setState(() => _paymentMethodId = v),
+                title: Text(m['title']?.toString() ?? m['label']?.toString() ?? id),
+              );
+            }),
+          ],
+          if (_shippingMethods.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Shipping method', style: Theme.of(context).textTheme.titleSmall),
+            ..._shippingMethods.map((m) {
+              final id = m['id']?.toString() ?? '';
+              return RadioListTile<String>(
+                value: id,
+                groupValue: _shippingMethodId,
+                onChanged: (v) => setState(() => _shippingMethodId = v),
+                title: Text(m['label']?.toString() ?? m['title']?.toString() ?? id),
+                subtitle: m['cost'] != null ? Text(m['cost'].toString()) : null,
+              );
+            }),
+          ],
+          TextFormField(
+            controller: _notes,
+            decoration: const InputDecoration(labelText: 'Order notes (optional)'),
+            maxLines: 2,
+          ),
+          CheckboxListTile(
+            value: _acceptedTerms,
+            onChanged: (v) => setState(() => _acceptedTerms = v ?? false),
+            title: const Text('I agree to the terms and conditions'),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 16),
+          LoadingButton(
+            label: 'Place order',
+            loading: _submitting,
+            onPressed: _placeOrder,
+          ),
+        ],
+      ),
     );
   }
 }

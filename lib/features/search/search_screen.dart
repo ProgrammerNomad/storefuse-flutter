@@ -2,11 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-
-import '../../core/models/json_helpers.dart';
 import '../../core/widgets/app_scaffold.dart';
-import '../../core/widgets/price_text.dart';
+import '../../core/widgets/empty_state_view.dart';
+import '../../core/widgets/paginated_list_view.dart';
+import '../../core/widgets/product_list_tile.dart';
 import '../catalog/catalog_repository.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
@@ -19,9 +18,7 @@ class SearchScreen extends ConsumerStatefulWidget {
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _controller = TextEditingController();
   Timer? _debounce;
-  List<JsonMap> _results = const [];
-  bool _loading = false;
-  String? _error;
+  String _query = '';
 
   @override
   void dispose() {
@@ -32,39 +29,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   void _onQueryChanged(String value) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 400), () => _search(value));
-  }
-
-  Future<void> _search(String q) async {
-    final query = q.trim();
-    if (query.length < 2) {
-      setState(() {
-        _results = const [];
-        _error = null;
-      });
-      return;
-    }
-    setState(() {
-      _loading = true;
-      _error = null;
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      setState(() => _query = value.trim());
     });
-    try {
-      final items =
-          await ref.read(catalogRepositoryProvider).searchProducts(query);
-      setState(() {
-        _results = List<JsonMap>.from(items);
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _loading = false;
-        _error = e.toString();
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final canSearch = _query.length >= 2;
+
     return AppScaffold(
       title: 'Search',
       body: Column(
@@ -81,26 +54,27 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               onChanged: _onQueryChanged,
             ),
           ),
-          if (_loading) const LinearProgressIndicator(),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          if (!canSearch)
+            const Expanded(
+              child: EmptyStateView(
+                title: 'Start typing to search',
+                message: 'Enter at least 2 characters.',
+                icon: Icons.search,
+              ),
+            )
+          else
+            Expanded(
+              child: PaginatedListView(
+                key: ValueKey(_query),
+                emptyTitle: 'No results',
+                emptyMessage: 'Try a different search term.',
+                loadPage: (page) => ref.read(catalogRepositoryProvider).searchPage(
+                      q: _query,
+                      page: page,
+                    ),
+                itemBuilder: (context, p, _) => ProductListTile(product: p),
+              ),
             ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _results.length,
-              itemBuilder: (context, index) {
-                final p = _results[index];
-                final slug = p['slug'] as String? ?? '';
-                return ListTile(
-                  title: Text(p['name']?.toString() ?? slug),
-                  subtitle: PriceText(price: asJsonMap(p['price'])),
-                  onTap: slug.isEmpty ? null : () => context.push('/products/$slug'),
-                );
-              },
-            ),
-          ),
         ],
       ),
     );

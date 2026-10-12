@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'features/bootstrap/bootstrap_provider.dart';
+import 'features/bootstrap/bootstrap_provider.dart';
 import 'features/bootstrap/store_branding.dart';
+import 'features/settings/settings_provider.dart';
 import 'routing/app_router.dart';
 
 class StoreFuseApp extends ConsumerStatefulWidget {
@@ -34,10 +36,20 @@ class _StoreFuseAppState extends ConsumerState<StoreFuseApp> {
     final router = ref.watch(appRouterProvider);
     final storeName = ref.watch(storeNameProvider);
     final theme = ref.watch(storeThemeProvider);
+    final appSettings = ref.watch(appSettingsProvider);
+    final darkTheme = ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: theme.colorScheme.primary,
+        brightness: Brightness.dark,
+      ),
+      useMaterial3: true,
+    );
 
     return MaterialApp.router(
       title: storeName,
       theme: theme,
+      darkTheme: darkTheme,
+      themeMode: appSettings.themeMode,
       routerConfig: router,
       builder: (context, child) {
         return Column(

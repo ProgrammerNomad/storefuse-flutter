@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,8 +11,30 @@ import '../../core/widgets/store_logo.dart';
 import 'bootstrap_provider.dart';
 import 'store_branding.dart';
 
-class SplashScreen extends ConsumerWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
+
+  @override
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends ConsumerState<SplashScreen> {
+  Timer? _slowTimer;
+  var _showSlowMessage = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _slowTimer = Timer(const Duration(seconds: 10), () {
+      if (mounted) setState(() => _showSlowMessage = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _slowTimer?.cancel();
+    super.dispose();
+  }
 
   void _goHomeIfReady(BuildContext context, BootstrapState state) {
     if (!state.loading && state.error == null && !state.bridgeVersionUnsupported) {
@@ -19,7 +43,7 @@ class SplashScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final bootstrap = ref.watch(bootstrapProvider);
     final env = ref.watch(appEnvProvider);
     final storeName = ref.watch(storeNameProvider);
@@ -57,6 +81,18 @@ class SplashScreen extends ConsumerWidget {
               ],
               const SizedBox(height: 24),
               const CircularProgressIndicator(),
+              const SizedBox(height: 12),
+              Text(
+                _showSlowMessage ? 'Taking too long?' : 'Connecting to your store…',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              if (_showSlowMessage) ...[
+                const SizedBox(height: 12),
+                FilledButton.tonal(
+                  onPressed: () => ref.read(bootstrapProvider.notifier).refresh(),
+                  child: const Text('Retry'),
+                ),
+              ],
               if (!env.isProd) ...[
                 const SizedBox(height: 16),
                 Text(

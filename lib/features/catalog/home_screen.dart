@@ -8,9 +8,10 @@ import '../../core/routing/store_href.dart';
 import '../../core/theme/store_colors.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/product_card.dart';
+import '../../core/widgets/shimmer_loading.dart' show ProductRowSkeleton;
 import '../bootstrap/bootstrap_provider.dart';
 import '../bootstrap/store_branding.dart';
-import 'homepage_provider.dart';
+import 'storefront_providers.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -24,16 +25,28 @@ class HomeScreen extends ConsumerWidget {
 
     return AppScaffold(
       title: name,
-      showBottomNav: true,
-      currentNavIndex: 0,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.search),
+          onPressed: () => context.push('/search'),
+        ),
+      ],
       body: homepageAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const ProductRowSkeleton(),
         error: (e, _) => _FallbackHome(name: name, tagline: tagline, showDevInfo: showDevInfo),
-        data: (homepage) => _HomepageBody(
-          homepage: homepage,
-          name: name,
-          tagline: tagline,
-          showDevInfo: showDevInfo,
+        data: (homepage) => RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(homepageProvider);
+            ref.invalidate(homepageBestSellersProvider);
+            ref.invalidate(homepageNewArrivalsProvider);
+            await ref.read(homepageProvider.future);
+          },
+          child: _HomepageBody(
+            homepage: homepage,
+            name: name,
+            tagline: tagline,
+            showDevInfo: showDevInfo,
+          ),
         ),
       ),
     );

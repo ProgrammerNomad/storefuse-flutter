@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/storefuse_client.dart' show StoreFuseApiClient;
 import '../../core/models/json_helpers.dart';
+import '../../core/models/paginated_result.dart';
 import '../../core/providers/providers.dart';
 
 final ordersRepositoryProvider = Provider<OrdersRepository>((ref) {
@@ -17,8 +18,13 @@ class OrdersRepository {
   Future<StoreFuseApiClient> _client() => ref.read(apiClientProvider.future);
 
   Future<List<JsonMap>> list({int page = 1, int perPage = 10}) async {
+    return (await listPage(page: page, perPage: perPage)).items;
+  }
+
+  Future<PaginatedResult<JsonMap>> listPage({int page = 1, int perPage = 10}) async {
     final client = await _client();
-    return asJsonList((await client.getOrders(page: page, perPage: perPage)).data['items']);
+    final data = (await client.getOrders(page: page, perPage: perPage)).data;
+    return PaginatedResult.jsonMaps(data);
   }
 
   Future<JsonMap> byId(int id) async {

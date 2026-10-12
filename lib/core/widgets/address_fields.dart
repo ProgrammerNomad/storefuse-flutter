@@ -99,7 +99,7 @@ class _AddressFieldsState extends ConsumerState<AddressFields> {
                   ? selected
                   : _countries.first['code']?.toString();
               return DropdownButtonFormField<String>(
-                initialValue: value,
+                value: value,
                 decoration: const InputDecoration(labelText: 'Country'),
                 items: _countries
                     .map(

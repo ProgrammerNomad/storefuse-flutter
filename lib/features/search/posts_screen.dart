@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/models/json_helpers.dart';
 import '../../core/providers/providers.dart';
+import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/error_view.dart';
+import '../../core/widgets/paginated_list_view.dart';
+import '../../core/widgets/store_html.dart';
+import '../catalog/catalog_repository.dart';
 
 class PostsScreen extends ConsumerStatefulWidget {
   const PostsScreen({super.key});
@@ -14,57 +19,44 @@ class PostsScreen extends ConsumerStatefulWidget {
 }
 
 class _PostsScreenState extends ConsumerState<PostsScreen> {
-  List<JsonMap> _posts = const [];
-  Object? _error;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final client = await ref.read(apiClientProvider.future);
-      final data = (await client.getPosts()).data;
-      setState(() {
-        _posts = asJsonList(data['items']);
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e;
-        _loading = false;
-      });
-    }
-  }
+  final _listKey = GlobalKey<PaginatedListViewState>();
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Blog')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? ErrorView(message: _error.toString(), onRetry: _load)
-              : ListView.separated(
-                  itemCount: _posts.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (_, i) {
-                    final post = _posts[i];
-                    final slug = post['slug'] as String? ?? '';
-                    final title = post['title'] as String? ?? slug;
-                    return ListTile(
-                      title: Text(title),
-                      onTap: slug.isEmpty ? null : () => context.push('/posts/$slug'),
-                    );
-                  },
-                ),
+    return AppScaffold(
+      title: 'Blog',
+      body: RefreshIndicator(
+        onRefresh: () async => _listKey.currentState?.refresh(),
+        child: PaginatedListView(
+          key: _listKey,
+          physics: const AlwaysScrollableScrollPhysics(),
+          emptyTitle: 'No posts yet',
+          loadPage: (page) => ref.read(catalogRepositoryProvider).postsPage(page: page),
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (context, post, index) {
+            final slug = post['slug'] as String? ?? '';
+            final title = post['title'] as String? ?? slug;
+            final date = post['date']?.toString();
+            String? formatted;
+            if (date != null) {
+              final parsed = DateTime.tryParse(date);
+              if (parsed != null) formatted = DateFormat.yMMMd().format(parsed);
+            }
+            final image = imageUrl(asJsonMap(post['featured_image'] ?? post['image']));
+            return ListTile(
+              leading: image != null
+                  ? Image.network(image, width: 56, height: 56, fit: BoxFit.cover)
+                  : const Icon(Icons.article_outlined),
+              title: Text(title),
+              subtitle: Text([
+                if (formatted != null) formatted,
+                post['author']?.toString(),
+              ].whereType<String>().join(' · ')),
+              onTap: slug.isEmpty ? null : () => context.push('/posts/$slug'),
+            );
+          },
+        ),
+      ),
     );
   }
 }
@@ -107,23 +99,27 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator()));
-    }
-    if (_error != null || _post == null) {
-      return Scaffold(
-        appBar: AppBar(),
-        body: ErrorView(message: _error.toString(), onRetry: _load),
-      );
-    }
-    final title = _post!['title'] as String? ?? '';
-    final content = _post!['content'] as String? ?? '';
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [Text(content)],
-      ),
+    return AppScaffold(
+      title: 'Post',
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? ErrorView(message: _error.toString(), onRetry: _load)
+              : ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Text(
+                      _post?['title']?.toString() ?? widget.slug,
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    if (_post?['date'] != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, bottom: 12),
+                        child: Text(_post!['date'].toString()),
+                      ),
+                    StoreHtml(html: _post?['content']?.toString() ?? ''),
+                  ],
+                ),
     );
   }
 }

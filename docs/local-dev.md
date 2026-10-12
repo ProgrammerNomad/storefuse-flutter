@@ -31,7 +31,31 @@ cd C:\xampp\htdocs\storefuse-flutter
 flutter run --dart-define=BRIDGE_BASE_URL=http://10.0.2.2 --dart-define=APP_FLAVOR=dev
 ```
 
-The repo also sets `kotlin.incremental=false` in `android/gradle.properties` as a safety net if you must use a shortcut. After path or Gradle changes, run `flutter clean` once.
+The repo also sets `kotlin.incremental=false` in `android/gradle.properties` and disables Kotlin incremental compile on all Android subprojects in `android/build.gradle.kts`. **If you see `different roots` in a Gradle error, you are almost certainly building from the wrong path** — switch to `C:\xampp\htdocs\storefuse-flutter` and clean caches (below).
+
+### Cache purge (after shortcut builds or Kotlin cache errors)
+
+```powershell
+cd C:\xampp\htdocs\storefuse-flutter
+flutter clean
+Remove-Item -Recurse -Force android\.gradle -ErrorAction SilentlyContinue
+# If you previously built from D:\Websites\storefuse-flutter:
+Remove-Item -Recurse -Force D:\Websites\storefuse-flutter\build -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force D:\Websites\storefuse-flutter\android\.gradle -ErrorAction SilentlyContinue
+flutter pub get
+```
+
+### Emulator: other Flutter apps
+
+If logcat shows `relay_uploader` or another package instead of `com.storefuse.storefuse_app`, uninstall the other app: `adb uninstall com.lasthash.relay_uploader`, then run StoreFuse again.
+
+### Quick run script (Windows)
+
+From repo root:
+
+```powershell
+.\scripts\run_android_dev.ps1
+```
 
 ## Run the app
 
