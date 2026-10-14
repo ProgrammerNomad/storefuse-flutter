@@ -16,7 +16,8 @@ class ResetPasswordScreen extends ConsumerStatefulWidget {
   final String login;
 
   @override
-  ConsumerState<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
+  ConsumerState<ResetPasswordScreen> createState() =>
+      _ResetPasswordScreenState();
 }
 
 class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
@@ -46,7 +47,9 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
             FilledButton(
               onPressed: () async {
                 try {
-                  await ref.read(authRepositoryProvider).resetPassword(
+                  await ref
+                      .read(authRepositoryProvider)
+                      .resetPassword(
                         key: widget.keyParam,
                         login: widget.login,
                         password: _password.text,
@@ -58,9 +61,10 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                     context.go('/auth/login');
                   }
                 } on StoreFuseApiException catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(e.message)),
-                  );
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(e.message)));
                 }
               },
               child: const Text('Update password'),

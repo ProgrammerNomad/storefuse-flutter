@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../config/env.dart';
+import '../features/bootstrap/bootstrap_provider.dart';
 import '../features/account/account_screen.dart';
 import '../features/account/addresses_screen.dart';
 import '../features/account/downloads_screen.dart';
@@ -43,7 +44,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     navigatorKey: rootNavigatorKey,
     initialLocation: '/',
     routes: [
-      GoRoute(path: '/', builder: (_, __) => const SplashScreen()),
+      GoRoute(
+        path: '/unavailable',
+        builder: (context, state) => Scaffold(
+          appBar: AppBar(title: const Text('Unavailable')),
+          body: Center(
+            child: FilledButton(
+              onPressed: () => context.go('/home'),
+              child: const Text('This feature is unavailable. Return home'),
+            ),
+          ),
+        ),
+      ),
+      GoRoute(path: '/', builder: (_, _) => const SplashScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
           return MainShell(navigationShell: navigationShell);
@@ -54,16 +67,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/home',
-                builder: (_, __) => const HomeScreen(),
+                builder: (_, _) => const HomeScreen(),
                 routes: [
                   GoRoute(
                     path: 'posts',
-                    builder: (_, __) => const PostsScreen(),
+                    builder: (_, _) => const PostsScreen(),
                     routes: [
                       GoRoute(
                         path: ':slug',
-                        builder: (_, state) =>
-                            PostDetailScreen(slug: state.pathParameters['slug']!),
+                        builder: (_, state) => PostDetailScreen(
+                          slug: state.pathParameters['slug']!,
+                        ),
                       ),
                     ],
                   ),
@@ -76,16 +90,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/products',
-                builder: (_, __) => const ProductListScreen(),
+                builder: (_, _) => const ProductListScreen(),
                 routes: [
                   GoRoute(
                     path: ':slug',
-                    builder: (_, state) =>
-                        ProductDetailScreen(slug: state.pathParameters['slug']!),
+                    builder: (_, state) => ProductDetailScreen(
+                      slug: state.pathParameters['slug']!,
+                    ),
                   ),
                 ],
               ),
-              GoRoute(path: '/categories', builder: (_, __) => const CategoryListScreen()),
+              GoRoute(
+                path: '/categories',
+                builder: (_, _) => const CategoryListScreen(),
+              ),
               GoRoute(
                 path: '/categories/:slug',
                 builder: (_, state) =>
@@ -96,7 +114,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             navigatorKey: _searchNavKey,
             routes: [
-              GoRoute(path: '/search', builder: (_, __) => const SearchScreen()),
+              GoRoute(path: '/search', builder: (_, _) => const SearchScreen()),
             ],
           ),
           StatefulShellBranch(
@@ -104,9 +122,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/cart',
-                builder: (_, __) => const CartScreen(),
+                builder: (_, _) => const CartScreen(),
                 routes: [
-                  GoRoute(path: 'checkout', builder: (_, __) => const CheckoutScreen()),
+                  GoRoute(
+                    path: 'checkout',
+                    builder: (_, _) => const CheckoutScreen(),
+                  ),
                 ],
               ),
             ],
@@ -116,30 +137,47 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/account',
-                builder: (_, __) => const AccountScreen(),
+                builder: (_, _) => const AccountScreen(),
                 routes: [
-                  GoRoute(path: 'edit-profile', builder: (_, __) => const EditProfileScreen()),
+                  GoRoute(
+                    path: 'edit-profile',
+                    builder: (_, _) => const EditProfileScreen(),
+                  ),
                   GoRoute(
                     path: 'change-password',
-                    builder: (_, __) => const ChangePasswordScreen(),
+                    builder: (_, _) => const ChangePasswordScreen(),
                   ),
-                  GoRoute(path: 'addresses', builder: (_, __) => const AddressesScreen()),
-                  GoRoute(path: 'wishlist', builder: (_, __) => const WishlistScreen()),
-                  GoRoute(path: 'downloads', builder: (_, __) => const DownloadsScreen()),
+                  GoRoute(
+                    path: 'addresses',
+                    builder: (_, _) => const AddressesScreen(),
+                  ),
+                  GoRoute(
+                    path: 'wishlist',
+                    builder: (_, _) => const WishlistScreen(),
+                  ),
+                  GoRoute(
+                    path: 'downloads',
+                    builder: (_, _) => const DownloadsScreen(),
+                  ),
                 ],
               ),
-              GoRoute(path: '/orders', builder: (_, __) => const OrderListScreen()),
+              GoRoute(
+                path: '/orders',
+                builder: (_, _) => const OrderListScreen(),
+              ),
               GoRoute(
                 path: '/orders/:id',
                 builder: (_, state) {
-                  final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+                  final id =
+                      int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
                   return OrderDetailScreen(orderId: id);
                 },
               ),
               GoRoute(
                 path: '/orders/confirm/:key',
-                builder: (_, state) =>
-                    OrderConfirmationScreen(orderKey: state.pathParameters['key']!),
+                builder: (_, state) => OrderConfirmationScreen(
+                  orderKey: state.pathParameters['key']!,
+                ),
               ),
             ],
           ),
@@ -149,17 +187,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/product/:slug',
         redirect: (_, state) => '/products/${state.pathParameters['slug']}',
       ),
-      GoRoute(path: '/posts', redirect: (_, __) => '/home/posts'),
+      GoRoute(path: '/posts', redirect: (_, _) => '/home/posts'),
       GoRoute(
         path: '/posts/:slug',
         redirect: (_, state) => '/home/posts/${state.pathParameters['slug']}',
       ),
-      GoRoute(path: '/checkout', redirect: (_, __) => '/cart/checkout'),
-      GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
-      GoRoute(path: '/settings/about', builder: (_, __) => const AboutScreen()),
-      GoRoute(path: '/auth/login', builder: (_, __) => const LoginScreen()),
-      GoRoute(path: '/auth/register', builder: (_, __) => const RegisterScreen()),
-      GoRoute(path: '/auth/forgot-password', builder: (_, __) => const ForgotPasswordScreen()),
+      GoRoute(path: '/checkout', redirect: (_, _) => '/cart/checkout'),
+      GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
+      GoRoute(path: '/settings/about', builder: (_, _) => const AboutScreen()),
+      GoRoute(path: '/auth/login', builder: (_, _) => const LoginScreen()),
+      GoRoute(
+        path: '/auth/register',
+        builder: (_, _) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/auth/forgot-password',
+        builder: (_, _) => const ForgotPasswordScreen(),
+      ),
       GoRoute(
         path: '/auth/reset-password',
         builder: (_, state) => ResetPasswordScreen(
@@ -170,6 +214,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ],
     redirect: (context, state) {
       final uri = state.uri;
+      final modules = ref.read(bootstrapProvider).valueOrNull?.modules ?? {};
+      const routeModules = {
+        '/cart/checkout': 'checkout',
+        '/checkout': 'checkout',
+        '/account/addresses': 'addresses',
+        '/account/wishlist': 'wishlist',
+        '/account/downloads': 'downloads',
+        '/products': 'products',
+        '/categories': 'categories',
+        '/search': 'search',
+        '/cart': 'cart',
+        '/account': 'account',
+        '/orders': 'orders',
+        '/home/posts': 'posts',
+      };
+      for (final entry in routeModules.entries) {
+        if ((uri.path == entry.key || uri.path.startsWith('${entry.key}/')) &&
+            modules[entry.value] == false) {
+          return '/unavailable';
+        }
+      }
       if (uri.scheme == env.deepLinkScheme) {
         if (uri.host == 'reset') {
           return Uri(

@@ -24,11 +24,7 @@ class CartItem {
 }
 
 class CartSummary {
-  const CartSummary({
-    this.items = const [],
-    this.totals,
-    this.itemCount = 0,
-  });
+  const CartSummary({this.items = const [], this.totals, this.itemCount = 0});
 
   final List<CartItem> items;
   final JsonMap? totals;

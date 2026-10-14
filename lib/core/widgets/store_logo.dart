@@ -22,7 +22,7 @@ class StoreLogo extends StatelessWidget {
       imageUrl: logoUrl!,
       height: height,
       fit: BoxFit.contain,
-      errorWidget: (_, __, ___) => fallback ?? const SizedBox.shrink(),
+      errorWidget: (_, _, _) => fallback ?? const SizedBox.shrink(),
     );
   }
 }

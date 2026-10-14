@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/storefuse_client.dart' show StoreFuseApiClient;
@@ -5,6 +6,7 @@ import '../../core/models/json_helpers.dart';
 import '../../core/providers/providers.dart';
 import '../account/wishlist_ids_provider.dart';
 import '../auth/auth_session_provider.dart';
+import '../bootstrap/bootstrap_provider.dart';
 import '../cart/cart_provider.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -34,6 +36,7 @@ class AuthRepository {
     ref.invalidate(authSessionProvider);
     await ref.read(cartProvider.notifier).refresh();
     ref.read(wishlistIdsProvider.notifier).refresh();
+    await _registerPushTokenIfConfigured(client);
   }
 
   Future<void> register({
@@ -47,10 +50,45 @@ class AuthRepository {
     await client.authRegister({
       'email': email,
       'password': password,
-      if (firstName != null) 'first_name': firstName,
-      if (lastName != null) 'last_name': lastName,
+      'first_name': ?firstName,
+      'last_name': ?lastName,
     });
-    await login(email: email, password: password);
+    await client.authMe();
+    ref.invalidate(authSessionProvider);
+    await ref.read(cartProvider.notifier).refresh();
+    ref.read(wishlistIdsProvider.notifier).refresh();
+    await _registerPushTokenIfConfigured(client);
+  }
+
+  Future<void> _registerPushTokenIfConfigured(StoreFuseApiClient client) async {
+    const enabled = bool.fromEnvironment(
+      'REGISTER_DEVICE_TOKEN',
+      defaultValue: false,
+    );
+    if (!enabled && !kDebugMode) return;
+    if (ref.read(appEnvProvider).isProd) return;
+
+    final features = asJsonMap(
+      ref.read(bootstrapProvider).valueOrNull?.statusData?['features'],
+    );
+    if (!enabled &&
+        !kDebugMode &&
+        features?['push_notifications'] != true) {
+      return;
+    }
+
+    const token = String.fromEnvironment(
+      'DEVICE_PUSH_TOKEN',
+      defaultValue: 'dev-stub-token',
+    );
+    final platform = defaultTargetPlatform == TargetPlatform.iOS
+        ? 'ios'
+        : 'android';
+    try {
+      await client.registerDeviceToken(token: token, platform: platform);
+    } catch (_) {
+      // Push delivery still requires merchant FCM/APNs wiring.
+    }
   }
 
   Future<void> logout() async {
@@ -60,6 +98,7 @@ class AuthRepository {
     } finally {
       await client.clearSessionCookies();
       ref.invalidate(authSessionProvider);
+      ref.invalidate(wishlistIdsProvider);
       await ref.read(cartProvider.notifier).refresh();
     }
   }
@@ -135,12 +174,14 @@ class AuthRepository {
     required String review,
   }) async {
     final client = await _client();
-    await client.submitReview(body: {
-      'product_id': productId,
-      'rating': rating,
-      'content': review,
-      'review': review,
-    });
+    await client.submitReview(
+      body: {
+        'product_id': productId,
+        'rating': rating,
+        'content': review,
+        'review': review,
+      },
+    );
   }
 
   Future<bool> isLoggedIn() async {

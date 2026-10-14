@@ -41,17 +41,17 @@ class Address {
   }
 
   JsonMap toJson() => {
-        if (firstName != null) 'first_name': firstName,
-        if (lastName != null) 'last_name': lastName,
-        if (email != null) 'email': email,
-        if (phone != null) 'phone': phone,
-        if (address1 != null) 'address_1': address1,
-        if (address2 != null) 'address_2': address2,
-        if (city != null) 'city': city,
-        if (state != null) 'state': state,
-        if (postcode != null) 'postcode': postcode,
-        if (country != null) 'country': country,
-      };
+    if (firstName != null) 'first_name': firstName,
+    if (lastName != null) 'last_name': lastName,
+    if (email != null) 'email': email,
+    if (phone != null) 'phone': phone,
+    if (address1 != null) 'address_1': address1,
+    if (address2 != null) 'address_2': address2,
+    if (city != null) 'city': city,
+    if (state != null) 'state': state,
+    if (postcode != null) 'postcode': postcode,
+    if (country != null) 'country': country,
+  };
 
   String get formattedLines {
     final parts = <String>[
@@ -60,7 +60,11 @@ class Address {
       if (address1 != null && address1!.isNotEmpty) address1!,
       if (address2 != null && address2!.isNotEmpty) address2!,
       if (city != null || state != null || postcode != null)
-        [city, state, postcode].where((e) => e != null && e.isNotEmpty).join(', '),
+        [
+          city,
+          state,
+          postcode,
+        ].where((e) => e != null && e.isNotEmpty).join(', '),
       if (country != null && country!.isNotEmpty) country!,
       if (email != null && email!.isNotEmpty) email!,
       if (phone != null && phone!.isNotEmpty) phone!,

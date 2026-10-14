@@ -4,7 +4,7 @@ import '../models/json_helpers.dart';
 
 class StockBadge extends StatelessWidget {
   const StockBadge({super.key, this.product, this.inStock})
-      : assert(product != null || inStock != null);
+    : assert(product != null || inStock != null);
 
   final JsonMap? product;
   final bool? inStock;
@@ -22,7 +22,11 @@ class StockBadge extends StatelessWidget {
       ),
       child: Text(
         stocked ? 'In stock' : 'Out of stock',
-        style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: 11,
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exception.dart';
+import '../../core/providers/providers.dart';
 import '../../core/models/json_helpers.dart';
 import '../../core/ui/show_store_error.dart';
 import '../../core/widgets/app_scaffold.dart';
@@ -20,6 +21,21 @@ class CartScreen extends ConsumerStatefulWidget {
 
 class _CartScreenState extends ConsumerState<CartScreen> {
   final _couponController = TextEditingController();
+  late final Future<Map<String, dynamic>> _recovery;
+
+  @override
+  void initState() {
+    super.initState();
+    _recovery = _loadRecovery();
+  }
+
+  Future<Map<String, dynamic>> _loadRecovery() async {
+    final client = await ref.read(apiClientProvider.future);
+    return {
+      'pending': await client.pendingCheckout() != null,
+      'key': await client.lastOrderKey(),
+    };
+  }
 
   @override
   void dispose() {
@@ -43,6 +59,32 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                FutureBuilder<Map<String, dynamic>>(
+                  future: _recovery,
+                  builder: (context, snapshot) {
+                    final pending = snapshot.data?['pending'] == true;
+                    final key = snapshot.data?['key']?.toString();
+                    if (!pending && (key == null || key.isEmpty)) {
+                      return const SizedBox.shrink();
+                    }
+                    return ListTile(
+                      leading: const Icon(Icons.receipt_long_outlined),
+                      title: Text(
+                        pending
+                            ? 'Recover previous checkout'
+                            : 'View your latest order',
+                      ),
+                      subtitle: pending
+                          ? const Text(
+                              'Check the previous attempt before placing another order.',
+                            )
+                          : null,
+                      onTap: () => context.push(
+                        pending ? '/checkout' : '/orders/confirm/$key',
+                      ),
+                    );
+                  },
+                ),
                 if (cart.error != null)
                   MaterialBanner(
                     content: Text(cart.error!.message),
@@ -73,8 +115,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                             itemBuilder: (context, index) {
                               final line = items[index];
                               final key = line['key'] as String? ?? '';
-                              final product = asJsonMap(line['product']) ?? line;
-                              final qty = parseInt(line['quantity'], fallback: 1);
+                              final product =
+                                  asJsonMap(line['product']) ?? line;
+                              final qty = parseInt(
+                                line['quantity'],
+                                fallback: 1,
+                              );
                               final thumb = productThumbnailUrl(product);
                               return Dismissible(
                                 key: ValueKey(key),
@@ -83,15 +129,26 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                   color: Theme.of(context).colorScheme.error,
                                   alignment: Alignment.centerRight,
                                   padding: const EdgeInsets.only(right: 16),
-                                  child: const Icon(Icons.delete, color: Colors.white),
+                                  child: const Icon(
+                                    Icons.delete,
+                                    color: Colors.white,
+                                  ),
                                 ),
-                                onDismissed: (_) =>
-                                    ref.read(cartProvider.notifier).removeLine(key),
+                                onDismissed: (_) => ref
+                                    .read(cartProvider.notifier)
+                                    .removeLine(key),
                                 child: ListTile(
-                                  leading: cachedThumbnail(url: thumb, size: 48),
-                                  title: Text(product['name']?.toString() ?? 'Item'),
+                                  leading: cachedThumbnail(
+                                    url: thumb,
+                                    size: 48,
+                                  ),
+                                  title: Text(
+                                    product['name']?.toString() ?? 'Item',
+                                  ),
                                   subtitle: PriceText(
-                                    price: asJsonMap(line['price'] ?? product['price']),
+                                    price: asJsonMap(
+                                      line['price'] ?? product['price'],
+                                    ),
                                   ),
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -99,17 +156,25 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                       IconButton(
                                         icon: const Icon(Icons.remove),
                                         onPressed: qty <= 1
-                                            ? () => ref.read(cartProvider.notifier).removeLine(key)
+                                            ? () => ref
+                                                  .read(cartProvider.notifier)
+                                                  .removeLine(key)
                                             : () => ref
-                                                .read(cartProvider.notifier)
-                                                .updateLine(key: key, quantity: qty - 1),
+                                                  .read(cartProvider.notifier)
+                                                  .updateLine(
+                                                    key: key,
+                                                    quantity: qty - 1,
+                                                  ),
                                       ),
                                       Text('$qty'),
                                       IconButton(
                                         icon: const Icon(Icons.add),
                                         onPressed: () => ref
                                             .read(cartProvider.notifier)
-                                            .updateLine(key: key, quantity: qty + 1),
+                                            .updateLine(
+                                              key: key,
+                                              quantity: qty + 1,
+                                            ),
                                       ),
                                     ],
                                   ),
@@ -122,7 +187,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 if (items.isNotEmpty) ...[
                   if (coupons.isNotEmpty)
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
                       child: Wrap(
                         spacing: 8,
                         children: coupons.map((c) {
@@ -138,7 +206,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                           .removeCoupon(code);
                                     } on StoreFuseApiException catch (e) {
                                       if (context.mounted) {
-                                        SnackBarHelper.showException(context, e);
+                                        if (!context.mounted) return;
+                                        SnackBarHelper.showException(
+                                          context,
+                                          e,
+                                        );
                                       }
                                     }
                                   },
@@ -153,7 +225,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         Expanded(
                           child: TextField(
                             controller: _couponController,
-                            decoration: const InputDecoration(labelText: 'Coupon code'),
+                            decoration: const InputDecoration(
+                              labelText: 'Coupon code',
+                            ),
                           ),
                         ),
                         IconButton(
@@ -164,7 +238,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                   .read(cartProvider.notifier)
                                   .applyCoupon(_couponController.text.trim());
                             } on StoreFuseApiException catch (e) {
-                              if (context.mounted) SnackBarHelper.showException(context, e);
+                              if (context.mounted) {
+                                if (!context.mounted) return;
+                                SnackBarHelper.showException(context, e);
+                              }
                             }
                           },
                         ),
@@ -183,7 +260,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [

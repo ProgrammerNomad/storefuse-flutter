@@ -13,7 +13,10 @@ class SaleBadge extends StatelessWidget {
       ),
       child: Text(
         'Sale',
-        style: TextStyle(color: Theme.of(context).colorScheme.onError, fontSize: 11),
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onError,
+          fontSize: 11,
+        ),
       ),
     );
   }

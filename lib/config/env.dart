@@ -8,7 +8,7 @@ class AppEnv {
     required this.enableHttpLogs,
   });
 
-  static const minSupportedBridgeVersion = '1.0.2';
+  static const minSupportedBridgeVersion = '1.1.0';
 
   final String bridgeBaseUrl;
   final String apiNamespace;
@@ -24,9 +24,11 @@ class AppEnv {
   bool get isProd => flavor == 'prod';
 
   /// Shorter timeouts in dev so splash fails fast when XAMPP/emulator URL is wrong.
-  Duration get connectTimeout => isProd ? const Duration(seconds: 30) : const Duration(seconds: 10);
+  Duration get connectTimeout =>
+      isProd ? const Duration(seconds: 30) : const Duration(seconds: 10);
 
-  Duration get receiveTimeout => isProd ? const Duration(seconds: 30) : const Duration(seconds: 10);
+  Duration get receiveTimeout =>
+      isProd ? const Duration(seconds: 30) : const Duration(seconds: 10);
 
   static AppEnv fromDartDefines() {
     const flavor = String.fromEnvironment('APP_FLAVOR', defaultValue: 'dev');
@@ -54,9 +56,27 @@ class AppEnv {
     );
   }
 
+  /// Android emulator reaches the development machine through its host alias.
+  String resolveStoreUrl(String value) {
+    if (isProd) return value;
+    final base = Uri.tryParse(bridgeBaseUrl);
+    final url = Uri.tryParse(value);
+    if (base?.host == '10.0.2.2' &&
+        url != null &&
+        {'localhost', '127.0.0.1'}.contains(url.host) &&
+        {'http', 'https'}.contains(url.scheme) &&
+        url.port == base!.port) {
+      return url.replace(host: base.host).toString();
+    }
+    return value;
+  }
+
   void validate() {
     if (isProd && !bridgeBaseUrl.startsWith('https://')) {
       throw StateError('APP_FLAVOR=prod requires HTTPS BRIDGE_BASE_URL');
+    }
+    if (isProd && enableHttpLogs) {
+      throw StateError('ENABLE_HTTP_LOGS is not allowed when APP_FLAVOR=prod');
     }
   }
 }

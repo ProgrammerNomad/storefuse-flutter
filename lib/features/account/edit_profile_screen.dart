@@ -60,9 +60,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       });
       ref.invalidate(authSessionProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Profile updated')));
         Navigator.pop(context);
       }
     } on StoreFuseApiException catch (e) {

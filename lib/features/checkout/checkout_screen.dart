@@ -4,14 +4,15 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/models/json_helpers.dart';
-import '../../core/api/storefuse_client.dart';
 import '../../core/providers/providers.dart';
 import '../../core/ui/show_store_error.dart' show SnackBarHelper;
 import '../../core/widgets/app_scaffold.dart';
-import '../../core/widgets/address_fields.dart';
+import 'dart:convert';
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/widgets/price_text.dart';
 import '../../core/widgets/error_view.dart';
 import '../../core/widgets/loading_button.dart';
-import '../auth/auth_session_provider.dart';
+
 import '../bootstrap/bootstrap_provider.dart';
 import '../cart/cart_provider.dart';
 import 'checkout_webview_screen.dart';
@@ -59,15 +60,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? ErrorView.fromException(_error!, onRetry: _load)
-              : headless
-                  ? _HeadlessCheckoutForm(config: _config ?? {})
-                  : _RedirectCheckout(),
+          ? ErrorView.fromException(_error!, onRetry: _load)
+          : headless &&
+                _config?['native_fields_supported'] != false &&
+                _config?['requires_login'] != true
+          ? _HeadlessCheckoutForm(config: _config ?? {})
+          : _RedirectCheckout(
+              label: _config?['checkout_redirect_label']?.toString(),
+            ),
     );
   }
 }
 
 class _RedirectCheckout extends ConsumerWidget {
+  const _RedirectCheckout({this.label});
+  final String? label;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Center(
@@ -77,8 +84,7 @@ class _RedirectCheckout extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'This store uses WooCommerce redirect checkout. '
-              'You will complete payment in a secure WebView.',
+              'Complete your purchase securely with the store’s available payment options.',
             ),
             const SizedBox(height: 16),
             FilledButton(
@@ -89,23 +95,32 @@ class _RedirectCheckout extends ConsumerWidget {
                     await client.bootstrapNonces();
                   }
                   final data = (await client.checkoutRedirectUrl()).data;
-                  final url = data['redirect_url'] as String? ??
+                  final url =
+                      data['redirect_url'] as String? ??
                       data['checkout_url'] as String? ??
                       data['url'] as String?;
                   if (url == null || url.isEmpty) {
-                    throw StoreFuseApiException(message: 'No checkout URL returned.');
+                    throw StoreFuseApiException(
+                      message: 'No checkout URL returned.',
+                    );
                   }
                   if (!context.mounted) return;
-                  await Navigator.of(context).push<void>(
+                  await Navigator.of(context).push<bool>(
                     MaterialPageRoute(
-                      builder: (_) => CheckoutWebViewScreen(initialUrl: url),
+                      builder: (_) => CheckoutWebViewScreen(
+                        initialUrl: data['handoff_url']?.toString() ?? url,
+                        handoffToken: data['handoff_token']?.toString(),
+                        paymentOrigins: (data['payment_origins'] as List? ?? [])
+                            .cast<String>(),
+                      ),
                     ),
                   );
                 } on StoreFuseApiException catch (e) {
+                  if (!context.mounted) return;
                   SnackBarHelper.showException(context, e);
                 }
               },
-              child: const Text('Continue to checkout'),
+              child: Text(label ?? 'Continue to checkout'),
             ),
           ],
         ),
@@ -120,369 +135,483 @@ class _HeadlessCheckoutForm extends ConsumerStatefulWidget {
   final JsonMap config;
 
   @override
-  ConsumerState<_HeadlessCheckoutForm> createState() => _HeadlessCheckoutFormState();
+  ConsumerState<_HeadlessCheckoutForm> createState() =>
+      _HeadlessCheckoutFormState();
 }
 
 class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
   final _formKey = GlobalKey<FormState>();
-  final _email = TextEditingController();
-  final _firstName = TextEditingController();
-  final _lastName = TextEditingController();
-  final _address1 = TextEditingController();
-  final _city = TextEditingController();
-  final _postcode = TextEditingController();
-  final _state = TextEditingController();
-  final _notes = TextEditingController();
-  final _country = ValueNotifier<String>('');
-  final _shipFirstName = TextEditingController();
-  final _shipLastName = TextEditingController();
-  final _shipAddress1 = TextEditingController();
-  final _shipCity = TextEditingController();
-  final _shipPostcode = TextEditingController();
-  final _shipState = TextEditingController();
-  final _shipCountry = ValueNotifier<String>('');
-  bool _sameAsBilling = true;
-  bool _acceptedTerms = false;
-  bool _submitting = false;
-  bool _loadingMethods = true;
-  String? _idempotencyKey;
+  final _billing = <String, String>{};
+  final _shipping = <String, String>{};
+  final _selectedShipping = <int, String>{};
+  List<JsonMap> _methods = [];
+  List<JsonMap> _allPaymentMethods = [];
+  List<JsonMap> _packages = [];
+  JsonMap? _quote;
+  String? _payment;
+  String _notes = '';
+  bool _different = false;
+  bool _terms = false;
+  bool _busy = true;
+  String? _error;
+  String? _quotedAddress;
+  String? _quoteToken;
+  JsonMap? _pendingBody;
+  bool get _needsShipping => widget.config['has_shipping'] == true;
+  bool get _needsTerms {
+    if (widget.config['terms_checkbox_enabled'] == true) return true;
+    return parseInt(widget.config['terms_and_conditions_page_id']) > 0;
+  }
 
-  List<JsonMap> _paymentMethods = const [];
-  List<JsonMap> _shippingMethods = const [];
-  String? _paymentMethodId;
-  String? _shippingMethodId;
+  String? get _termsUrl {
+    final url = widget.config['terms_url']?.toString();
+    if (url != null && url.startsWith('http')) return url;
+    return null;
+  }
 
   @override
   void initState() {
     super.initState();
-    _loadPaymentMethods();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final defaultCountry = widget.config['default_country']?.toString();
-      if (defaultCountry != null && defaultCountry.isNotEmpty) {
-        _country.value = defaultCountry;
-      }
-    });
+    _initialize();
   }
 
-  @override
-  void dispose() {
-    _email.dispose();
-    _firstName.dispose();
-    _lastName.dispose();
-    _address1.dispose();
-    _city.dispose();
-    _postcode.dispose();
-    _state.dispose();
-    _notes.dispose();
-    _country.dispose();
-    _shipFirstName.dispose();
-    _shipLastName.dispose();
-    _shipAddress1.dispose();
-    _shipCity.dispose();
-    _shipPostcode.dispose();
-    _shipState.dispose();
-    _shipCountry.dispose();
-    super.dispose();
-  }
-
-  JsonMap _billingPayload() {
-    final country = _country.value.trim();
-    return {
-      'email': _email.text.trim(),
-      'first_name': _firstName.text.trim(),
-      'last_name': _lastName.text.trim(),
-      'address_1': _address1.text.trim(),
-      'city': _city.text.trim(),
-      'postcode': _postcode.text.trim(),
-      'state': _state.text.trim(),
-      'country': country.isEmpty ? 'IN' : country,
-    };
-  }
-
-  JsonMap _shippingPayload() {
-    if (_sameAsBilling) return _billingPayload();
-    final country = _shipCountry.value.trim();
-    return {
-      'first_name': _shipFirstName.text.trim(),
-      'last_name': _shipLastName.text.trim(),
-      'address_1': _shipAddress1.text.trim(),
-      'city': _shipCity.text.trim(),
-      'postcode': _shipPostcode.text.trim(),
-      'state': _shipState.text.trim(),
-      'country': country.isEmpty ? _billingPayload()['country'] : country,
-    };
-  }
-
-  Future<void> _loadPaymentMethods() async {
-    setState(() => _loadingMethods = true);
+  Future<void> _initialize() async {
     try {
       final client = await ref.read(apiClientProvider.future);
-      final data = (await client.getPaymentMethods()).data;
-      final methods = asJsonList(data['methods'] ?? data['payment_methods'] ?? data['items']);
-      setState(() {
-        _paymentMethods = methods;
-        _paymentMethodId = methods.isNotEmpty
-            ? methods.first['id']?.toString()
-            : null;
-        _loadingMethods = false;
-      });
-    } on StoreFuseApiException catch (e) {
-      if (mounted) SnackBarHelper.showException(context, e);
-      setState(() => _loadingMethods = false);
+      final me = (await client.authMe()).data;
+      for (final entry in (asJsonMap(me['billing']) ?? {}).entries) {
+        _billing[entry.key] = entry.value?.toString() ?? '';
+      }
+      for (final entry in (asJsonMap(me['shipping']) ?? {}).entries) {
+        _shipping[entry.key] = entry.value?.toString() ?? '';
+      }
+      _billing['country'] = _billing['country']?.isNotEmpty == true
+          ? _billing['country']!
+          : widget.config['default_country']?.toString() ?? '';
+      _shipping['country'] = _shipping['country']?.isNotEmpty == true
+          ? _shipping['country']!
+          : _billing['country']!;
+      _allPaymentMethods = asJsonList(
+        (await client.getPaymentMethods()).data['methods'],
+      );
+      _methods = _filterHeadlessMethods(_allPaymentMethods);
+      _payment = _methods.firstOrNull?['id']?.toString();
+      final pending = await client.pendingCheckout();
+      if (pending != null) {
+        final body = asJsonMap(pending['body']) ?? {};
+        _pendingBody = body;
+        _billing.addAll(
+          (asJsonMap(body['billing']) ?? {}).map(
+            (k, v) => MapEntry(k, v.toString()),
+          ),
+        );
+        _shipping.addAll(
+          (asJsonMap(body['shipping']) ?? {}).map(
+            (k, v) => MapEntry(k, v.toString()),
+          ),
+        );
+        _different = body['ship_to_different_address'] == true;
+        _payment = body['payment_method']?.toString() ?? _payment;
+        _notes = body['order_notes']?.toString() ?? '';
+        _terms = body['terms'] == true;
+      }
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _loadShippingMethods() async {
+  List<JsonMap> _filterHeadlessMethods(List<JsonMap> methods) {
+    final allowed = asJsonList(widget.config['headless_gateways'])
+        .map((e) => e.toString())
+        .toSet();
+    if (allowed.isEmpty) return methods;
+    return methods.where((m) => allowed.contains(m['id']?.toString())).toList();
+  }
+
+  List<JsonMap> _unsupportedHeadlessMethods(List<JsonMap> all) {
+    final allowed = _filterHeadlessMethods(all);
+    final allowedIds = allowed.map((m) => m['id']).toSet();
+    return all.where((m) => !allowedIds.contains(m['id'])).toList();
+  }
+
+  JsonMap _body() => {
+    'quote_token': _quoteToken,
+    'billing': _billing,
+    'shipping': _different ? _shipping : _billing,
+    'ship_to_different_address': _different,
+    'payment_method': _payment,
+    'shipping_method': [
+      for (final package in _packages)
+        _selectedShipping[parseInt(package['index'])] ?? '',
+    ],
+    'order_notes': _notes,
+    'terms': _terms,
+  };
+
+  String _addressSignature() => jsonEncode([_billing, _shipping, _different]);
+
+  void _changed() {
+    setState(() {
+      _quote = null;
+      _quotedAddress = null;
+    });
+  }
+
+  Future<void> _calculate() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
       final client = await ref.read(apiClientProvider.future);
-      if (client.nonces.wcNonce == null) {
-        await client.bootstrapNonces();
+      final data = (await client.checkoutQuote(_body())).data;
+      _packages = asJsonList(data['packages']);
+      _selectedShipping.clear();
+      for (final package in _packages) {
+        final methods = asJsonList(package['methods']);
+        final chosen =
+            methods.where((m) => m['is_selected'] == true).firstOrNull ??
+            methods.firstOrNull;
+        if (chosen != null) {
+          _selectedShipping[parseInt(package['index'])] = chosen['id']
+              .toString();
+        }
       }
-      final billing = _billingPayload();
-      final data = (await client.getShippingMethods(address: billing)).data;
-      final methods = shippingMethodsFromCheckoutData(data);
-      setState(() {
-        _shippingMethods = methods;
-        _shippingMethodId = methods.isNotEmpty
-            ? methods.first['id']?.toString()
-            : null;
-      });
-    } on StoreFuseApiException catch (e) {
-      if (mounted) SnackBarHelper.showException(context, e);
+      _quote = asJsonMap(data['cart']);
+      _quoteToken = data['quote_token']?.toString();
+      _quotedAddress = _addressSignature();
+      _allPaymentMethods = asJsonList(
+        (await client.getPaymentMethods()).data['methods'],
+      );
+      _methods = _filterHeadlessMethods(_allPaymentMethods);
+      if (!_methods.any((m) => m['id'] == _payment)) {
+        _payment = _methods.firstOrNull?['id']?.toString();
+      }
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _recover() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final client = await ref.read(apiClientProvider.future);
+      final data = (await client.checkoutHeadless(_pendingBody!)).data;
+      final key = await client.resolveCheckoutOrderKey(data);
+      if (key == null) {
+        throw StateError(
+          'Order recovery is pending. Contact the store before placing another order.',
+        );
+      }
+      await ref.read(cartProvider.notifier).refresh();
+      if (mounted) context.go('/orders/confirm/$key');
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _placeOrder() async {
+    if (_pendingBody != null) {
+      await _recover();
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
-    if (!_acceptedTerms) {
-      SnackBarHelper.showMessage(context, 'Please accept the terms to continue.');
+    if ((_needsTerms && !_terms) || _payment == null) {
+      setState(
+        () => _error = 'Select a payment method and accept the store terms.',
+      );
       return;
     }
-    if (_paymentMethodId == null || _paymentMethodId!.isEmpty) {
-      SnackBarHelper.showMessage(context, 'Select a payment method.');
+    if (_quotedAddress != _addressSignature() ||
+        _quote == null ||
+        (_needsShipping &&
+            (_packages.isEmpty ||
+                _selectedShipping.length != _packages.length))) {
+      setState(
+        () => _error =
+            'Review delivery options and the updated total before placing your order.',
+      );
       return;
     }
-    if (_shippingMethods.isNotEmpty &&
-        (_shippingMethodId == null || _shippingMethodId!.isEmpty)) {
-      SnackBarHelper.showMessage(context, 'Select a shipping method.');
-      return;
-    }
-
-    setState(() => _submitting = true);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
       final client = await ref.read(apiClientProvider.future);
-      if (client.nonces.wcNonce == null) {
-        await client.bootstrapNonces();
-      }
-      final billing = _billingPayload();
-      final shipping = _shippingPayload();
-      _idempotencyKey ??= StoreFuseApiClient.generateIdempotencyKey();
-      final result = (await client.checkoutHeadless(
-        {
-          'billing': billing,
-          'shipping': shipping,
-          'ship_to_different_address': !_sameAsBilling,
-          'payment_method': _paymentMethodId,
-          if (_shippingMethodId != null) 'shipping_method': [_shippingMethodId],
-          if (_notes.text.trim().isNotEmpty) ...{
-            'order_notes': _notes.text.trim(),
-            'order_comments': _notes.text.trim(),
-          },
-        },
-        idempotencyKey: _idempotencyKey,
-      )).data;
-
-      final payment = asJsonMap(result['payment_result']);
-      final paymentType = payment?['type']?.toString();
-      final paymentUrl = payment?['redirect_url']?.toString();
-      if (paymentType == 'redirect' &&
-          paymentUrl != null &&
-          paymentUrl.isNotEmpty &&
-          context.mounted) {
-        await Navigator.of(context).push<void>(
-          MaterialPageRoute(
-            builder: (_) => CheckoutWebViewScreen(initialUrl: paymentUrl),
-          ),
+      final data = (await client.checkoutHeadless(_body())).data;
+      final key = await client.resolveCheckoutOrderKey(data);
+      if (key == null) {
+        throw StateError(
+          'Order recovery is pending. Check your orders before retrying.',
         );
       }
-
-      final key = result['order_key']?.toString() ?? result['key']?.toString();
-      if (key != null && context.mounted) {
-        context.go('/orders/confirm/$key');
-      }
-    } on StoreFuseApiException catch (e) {
-      SnackBarHelper.showException(context, e);
+      await ref.read(cartProvider.notifier).refresh();
+      if (mounted) context.go('/orders/confirm/$key');
+    } catch (e) {
+      _error = e.toString();
+      final client = await ref.read(apiClientProvider.future);
+      _pendingBody = asJsonMap((await client.pendingCheckout())?['body']);
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) setState(() => _busy = false);
     }
+  }
+
+  List<Widget> _addressFields(String kind, Map<String, String> values) {
+    final fields = asJsonList(widget.config['${kind}_fields']);
+    final countries =
+        asJsonMap(
+          widget.config[kind == 'shipping'
+              ? 'shipping_countries'
+              : 'allowed_countries'],
+        ) ??
+        {};
+    final stateMap =
+        asJsonMap(
+          widget.config[kind == 'shipping' ? 'shipping_states' : 'states'],
+        ) ??
+        {};
+    final country = values['country'] ?? '';
+    final states = asJsonMap(stateMap[country]) ?? {};
+    final locale =
+        asJsonMap(asJsonMap(widget.config['country_locale'])?[country]) ?? {};
+    return fields.map((original) {
+      final name = original['name']?.toString() ?? '';
+      final field = {...original, ...?asJsonMap(locale[name])};
+      if (field['hidden'] == true) return const SizedBox.shrink();
+      final required = field['required'] == true;
+      final options = name == 'country'
+          ? countries
+          : name == 'state'
+          ? states
+          : asJsonMap(field['options']) ?? {};
+      final label = '${field['label'] ?? name}${required ? ' *' : ''}';
+      String? validate(String? value) =>
+          required && (value == null || value.trim().isEmpty)
+          ? 'Required'
+          : null;
+      if (options.isNotEmpty) {
+        return DropdownButtonFormField<String>(
+          key: ValueKey('$kind-$name-$country-${values[name]}'),
+          initialValue: options.containsKey(values[name]) ? values[name] : null,
+          isExpanded: true,
+          decoration: InputDecoration(labelText: label),
+          validator: validate,
+          items: options.entries
+              .map(
+                (e) => DropdownMenuItem(
+                  value: e.key,
+                  child: Text(e.value.toString()),
+                ),
+              )
+              .toList(),
+          onChanged: (value) {
+            values[name] = value ?? '';
+            if (name == 'country') values['state'] = '';
+            _changed();
+          },
+        );
+      }
+      return TextFormField(
+        key: ValueKey('$kind-$name-$country'),
+        initialValue: values[name] ?? '',
+        decoration: InputDecoration(labelText: label),
+        validator: validate,
+        keyboardType: name == 'email'
+            ? TextInputType.emailAddress
+            : name == 'phone'
+            ? TextInputType.phone
+            : TextInputType.streetAddress,
+        textInputAction: TextInputAction.next,
+        onChanged: (value) {
+          values[name] = value.trim();
+          _changed();
+        },
+      );
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final loggedIn = ref.watch(isLoggedInProvider);
-    final cart = ref.watch(cartProvider).data;
-    final lines = asJsonList(cart?['items']);
-
-    if (_loadingMethods) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    return Form(
-      key: _formKey,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (!loggedIn)
-            Card(
-              child: ListTile(
-                title: const Text('Have an account?'),
-                subtitle: const Text('Sign in for faster checkout'),
-                trailing: TextButton(
-                  onPressed: () => context.push('/auth/login'),
-                  child: const Text('Sign in'),
+    final totals = asJsonMap(_quote?['totals']) ?? {};
+    return AbsorbPointer(
+      absorbing: _busy,
+      child: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (_busy) const LinearProgressIndicator(),
+            if (_pendingBody != null)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'An earlier checkout did not finish confirming. Recover that order before making another purchase.',
+                      ),
+                      FilledButton(
+                        onPressed: _recover,
+                        child: const Text('Recover previous order'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          if (lines.isNotEmpty) ...[
-            Text('Order summary', style: Theme.of(context).textTheme.titleMedium),
-            ...lines.map((line) {
-              return ListTile(
-                dense: true,
-                title: Text(line['name']?.toString() ?? 'Item'),
-                subtitle: Text('Qty ${line['quantity'] ?? 1}'),
-                trailing: Text(
-                  asJsonMap(line['totals'])?['formatted']?.toString() ??
-                      priceFormatted(asJsonMap(line['price'])),
-                ),
-              );
-            }),
-            if (cart?['totals'] != null)
+            if (_error != null)
               Padding(
-                padding: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(
-                  'Total: ${asJsonMap(cart!['totals'])?['total']?['formatted'] ?? ''}',
-                  style: Theme.of(context).textTheme.titleSmall,
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
-            const Divider(),
+            Text(
+              'Billing address',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            ..._addressFields('billing', _billing),
+            if (_needsShipping)
+              SwitchListTile(
+                title: const Text('Deliver to a different address'),
+                value: _different,
+                onChanged: (value) {
+                  _different = value;
+                  _changed();
+                },
+              ),
+            if (_needsShipping && _different)
+              ..._addressFields('shipping', _shipping),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: _calculate,
+              child: const Text('Review delivery and total'),
+            ),
+            for (final package in _packages) ...[
+              Text('Shipment ${parseInt(package['index']) + 1}'),
+              if (asJsonList(package['methods']).isEmpty)
+                const Text('Delivery is unavailable for this address.'),
+              for (final method in asJsonList(package['methods']))
+                ListTile(
+                  title: Text(method['label']?.toString() ?? ''),
+                  subtitle: PriceText(price: asJsonMap(method['cost'])),
+                  leading: Icon(
+                    _selectedShipping[parseInt(package['index'])] ==
+                            method['id']
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
+                  ),
+                  onTap: () async {
+                    _selectedShipping[parseInt(package['index'])] = method['id']
+                        .toString();
+                    await _calculate();
+                  },
+                ),
+            ],
+            if (_quote != null) ...[
+              for (final key in [
+                'subtotal',
+                'shipping',
+                'discount',
+                'tax',
+                'total',
+              ])
+                if (totals[key] != null)
+                  ListTile(
+                    title: Text(key.replaceAll('_', ' ')),
+                    trailing: PriceText(price: asJsonMap(totals[key])),
+                  ),
+            ],
+            if (_methods.isEmpty && _pendingBody == null)
+              _RedirectCheckout(
+                label: widget.config['checkout_redirect_label']?.toString(),
+              ),
+            for (final method in _methods)
+              ListTile(
+                title: Text(method['title']?.toString() ?? ''),
+                leading: Icon(
+                  _payment == method['id']
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_off,
+                ),
+                onTap: () => setState(() => _payment = method['id'].toString()),
+              ),
+            for (final method in _unsupportedHeadlessMethods(_allPaymentMethods))
+              ListTile(
+                enabled: false,
+                title: Text(method['title']?.toString() ?? ''),
+                subtitle: const Text(
+                  'Complete this payment on the store website checkout.',
+                ),
+                leading: const Icon(Icons.lock_outline),
+              ),
+            if (widget.config['order_notes_enabled'] == true)
+              TextFormField(
+                initialValue: _notes,
+                decoration: const InputDecoration(
+                  labelText: 'Order notes (optional)',
+                ),
+                onChanged: (v) => _notes = v,
+              ),
+            if (_needsTerms)
+              CheckboxListTile(
+                value: _terms,
+                onChanged: (v) => setState(() => _terms = v ?? false),
+                title: _termsUrl == null
+                    ? const Text('I agree to the terms and conditions')
+                    : Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          const Text('I agree to the '),
+                          InkWell(
+                            onTap: () => launchUrl(
+                              Uri.parse(_termsUrl!),
+                              mode: LaunchMode.externalApplication,
+                            ),
+                            child: Text(
+                              'terms and conditions',
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    color: Theme.of(context).colorScheme.primary,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            for (final entry in {
+              if (_termsUrl == null)
+                'Terms and conditions': widget.config['terms_url'],
+              'Privacy policy': widget.config['privacy_url'],
+            }.entries)
+              if (entry.value is String &&
+                  entry.value.toString().startsWith('http'))
+                TextButton(
+                  onPressed: () => launchUrl(
+                    Uri.parse(entry.value.toString()),
+                    mode: LaunchMode.externalApplication,
+                  ),
+                  child: Text(entry.key),
+                ),
+            LoadingButton(
+              label: 'Place order',
+              loading: _busy,
+              onPressed: _placeOrder,
+            ),
           ],
-          TextFormField(
-            controller: _email,
-            decoration: const InputDecoration(labelText: 'Email'),
-            keyboardType: TextInputType.emailAddress,
-            validator: (v) {
-              final t = v?.trim() ?? '';
-              if (t.isEmpty) return 'Email is required';
-              if (!t.contains('@')) return 'Enter a valid email';
-              return null;
-            },
-          ),
-          TextFormField(
-            controller: _firstName,
-            decoration: const InputDecoration(labelText: 'First name'),
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-          ),
-          TextFormField(
-            controller: _lastName,
-            decoration: const InputDecoration(labelText: 'Last name'),
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-          ),
-          TextFormField(
-            controller: _address1,
-            decoration: const InputDecoration(labelText: 'Address'),
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-          ),
-          AddressFields(
-            countryController: _country,
-            postcodeController: _postcode,
-            cityController: _city,
-            stateController: _state,
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: _loadShippingMethods,
-              child: const Text('Load shipping options'),
-            ),
-          ),
-          SwitchListTile(
-            value: _sameAsBilling,
-            onChanged: (v) => setState(() => _sameAsBilling = v),
-            title: const Text('Shipping same as billing'),
-          ),
-          if (!_sameAsBilling) ...[
-            Text('Shipping address', style: Theme.of(context).textTheme.titleSmall),
-            TextFormField(
-              controller: _shipFirstName,
-              decoration: const InputDecoration(labelText: 'Shipping first name'),
-              validator: (v) =>
-                  !_sameAsBilling && (v == null || v.trim().isEmpty) ? 'Required' : null,
-            ),
-            TextFormField(
-              controller: _shipLastName,
-              decoration: const InputDecoration(labelText: 'Shipping last name'),
-              validator: (v) =>
-                  !_sameAsBilling && (v == null || v.trim().isEmpty) ? 'Required' : null,
-            ),
-            TextFormField(
-              controller: _shipAddress1,
-              decoration: const InputDecoration(labelText: 'Shipping address'),
-              validator: (v) =>
-                  !_sameAsBilling && (v == null || v.trim().isEmpty) ? 'Required' : null,
-            ),
-            AddressFields(
-              countryController: _shipCountry,
-              postcodeController: _shipPostcode,
-              cityController: _shipCity,
-              stateController: _shipState,
-            ),
-          ],
-          if (_paymentMethods.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text('Payment method', style: Theme.of(context).textTheme.titleSmall),
-            ..._paymentMethods.map((m) {
-              final id = m['id']?.toString() ?? '';
-              return RadioListTile<String>(
-                value: id,
-                groupValue: _paymentMethodId,
-                onChanged: (v) => setState(() => _paymentMethodId = v),
-                title: Text(m['title']?.toString() ?? m['label']?.toString() ?? id),
-              );
-            }),
-          ],
-          if (_shippingMethods.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text('Shipping method', style: Theme.of(context).textTheme.titleSmall),
-            ..._shippingMethods.map((m) {
-              final id = m['id']?.toString() ?? '';
-              return RadioListTile<String>(
-                value: id,
-                groupValue: _shippingMethodId,
-                onChanged: (v) => setState(() => _shippingMethodId = v),
-                title: Text(m['label']?.toString() ?? m['title']?.toString() ?? id),
-                subtitle: m['cost'] != null ? Text(m['cost'].toString()) : null,
-              );
-            }),
-          ],
-          TextFormField(
-            controller: _notes,
-            decoration: const InputDecoration(labelText: 'Order notes (optional)'),
-            maxLines: 2,
-          ),
-          CheckboxListTile(
-            value: _acceptedTerms,
-            onChanged: (v) => setState(() => _acceptedTerms = v ?? false),
-            title: const Text('I agree to the terms and conditions'),
-            controlAffinity: ListTileControlAffinity.leading,
-            contentPadding: EdgeInsets.zero,
-          ),
-          const SizedBox(height: 16),
-          LoadingButton(
-            label: 'Place order',
-            loading: _submitting,
-            onPressed: _placeOrder,
-          ),
-        ],
+        ),
       ),
     );
   }

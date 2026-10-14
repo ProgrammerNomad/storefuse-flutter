@@ -73,7 +73,9 @@ class _AddressFieldsState extends ConsumerState<AddressFields> {
       }
     } on StoreFuseApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } finally {
       if (mounted) setState(() => _lookingUp = false);
@@ -94,18 +96,22 @@ class _AddressFieldsState extends ConsumerState<AddressFields> {
           ValueListenableBuilder<String>(
             valueListenable: widget.countryController,
             builder: (context, selected, _) {
-              final codes = _countries.map((c) => c['code']?.toString() ?? '').where((c) => c.isNotEmpty);
+              final codes = _countries
+                  .map((c) => c['code']?.toString() ?? '')
+                  .where((c) => c.isNotEmpty);
               final value = codes.contains(selected)
                   ? selected
                   : _countries.first['code']?.toString();
               return DropdownButtonFormField<String>(
-                value: value,
+                initialValue: value,
                 decoration: const InputDecoration(labelText: 'Country'),
                 items: _countries
                     .map(
                       (c) => DropdownMenuItem(
                         value: c['code']?.toString(),
-                        child: Text(c['name']?.toString() ?? c['code']?.toString() ?? ''),
+                        child: Text(
+                          c['name']?.toString() ?? c['code']?.toString() ?? '',
+                        ),
                       ),
                     )
                     .toList(),
@@ -121,7 +127,9 @@ class _AddressFieldsState extends ConsumerState<AddressFields> {
             builder: (context, value, _) {
               return TextFormField(
                 initialValue: value,
-                decoration: const InputDecoration(labelText: 'Country (ISO code)'),
+                decoration: const InputDecoration(
+                  labelText: 'Country (ISO code)',
+                ),
                 onChanged: (v) => widget.countryController.value = v.trim(),
               );
             },

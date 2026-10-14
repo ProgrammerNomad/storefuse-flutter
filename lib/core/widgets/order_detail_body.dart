@@ -41,7 +41,9 @@ class OrderDetailBody extends StatelessWidget {
         const SizedBox(height: 8),
         ...items.map((line) {
           final product = asJsonMap(line['product']);
-          final thumb = product != null ? imageUrl(asJsonMap(product['thumbnail'])) : null;
+          final thumb = product != null
+              ? imageUrl(asJsonMap(product['thumbnail']))
+              : null;
           return ListTile(
             contentPadding: EdgeInsets.zero,
             leading: thumb != null
@@ -49,7 +51,9 @@ class OrderDetailBody extends StatelessWidget {
                 : const Icon(Icons.shopping_bag_outlined),
             title: Text(line['name']?.toString() ?? 'Item'),
             subtitle: Text('Qty: ${line['quantity']}'),
-            trailing: PriceText(price: asJsonMap(line['total'] ?? line['subtotal'])),
+            trailing: PriceText(
+              price: asJsonMap(line['total'] ?? line['subtotal']),
+            ),
           );
         }),
         const Divider(height: 32),
@@ -76,7 +80,10 @@ class OrderDetailBody extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: bold ? const TextStyle(fontWeight: FontWeight.bold) : null),
+          Text(
+            label,
+            style: bold ? const TextStyle(fontWeight: FontWeight.bold) : null,
+          ),
           PriceText(price: asJsonMap(price)),
         ],
       ),

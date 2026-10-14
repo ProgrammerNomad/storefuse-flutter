@@ -18,7 +18,8 @@ class OrderConfirmationScreen extends ConsumerStatefulWidget {
       _OrderConfirmationScreenState();
 }
 
-class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScreen> {
+class _OrderConfirmationScreenState
+    extends ConsumerState<OrderConfirmationScreen> {
   late Future<Map<String, dynamic>> _future;
 
   @override
@@ -30,7 +31,7 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      title: 'Order confirmed',
+      title: 'Order status',
       body: FutureBuilder<Map<String, dynamic>>(
         future: _future,
         builder: (context, snapshot) {
@@ -41,21 +42,41 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
             return ErrorView(
               message: snapshot.error.toString(),
               onRetry: () => setState(() {
-                _future = ref.read(ordersRepositoryProvider).byKey(widget.orderKey);
+                _future = ref
+                    .read(ordersRepositoryProvider)
+                    .byKey(widget.orderKey);
               }),
             );
           }
           final order = Order.fromJson(snapshot.data!);
+          final confirmed = {
+            'processing',
+            'completed',
+            'on-hold',
+          }.contains(order.status);
+          final failed = {'failed', 'cancelled'}.contains(order.status);
           return Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary, size: 56),
-                Text('Thank you!', style: Theme.of(context).textTheme.headlineSmall),
+                Icon(
+                  confirmed ? Icons.check_circle : Icons.info_outline,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 56,
+                ),
+                Text(
+                  confirmed
+                      ? 'Order received'
+                      : failed
+                      ? 'Payment was not completed'
+                      : 'Awaiting payment confirmation',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
                 Text('Order #${order.number}'),
                 OrderStatusBadge(status: order.status ?? ''),
-                if (order.totalFormatted != null) Text('Total: ${order.totalFormatted}'),
+                if (order.totalFormatted != null)
+                  Text('Total: ${order.totalFormatted}'),
                 const SizedBox(height: 16),
                 Expanded(
                   child: ListView(

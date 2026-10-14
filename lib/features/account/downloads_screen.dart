@@ -31,16 +31,21 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   Future<void> _openDownload(JsonMap d) async {
     final url = d['download_url']?.toString() ?? d['url']?.toString() ?? '';
     if (url.isEmpty) {
+      if (!context.mounted) return;
       SnackBarHelper.showMessage(context, 'No download URL available.');
       return;
     }
     final uri = Uri.tryParse(url);
     if (uri == null) {
+      if (!context.mounted) return;
       SnackBarHelper.showMessage(context, 'Invalid download URL.');
       return;
     }
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (mounted) SnackBarHelper.showMessage(context, 'Could not open download.');
+      if (mounted) {
+        if (!context.mounted) return;
+        SnackBarHelper.showMessage(context, 'Could not open download.');
+      }
     }
   }
 
@@ -68,11 +73,17 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
               final remaining = d['downloads_remaining'];
               return ListTile(
                 leading: const Icon(Icons.download_outlined),
-                title: Text(d['name']?.toString() ?? d['product_name']?.toString() ?? 'Download'),
-                subtitle: Text([
-                  if (d['file'] != null) d['file'].toString(),
-                  if (remaining != null) 'Remaining: $remaining',
-                ].join(' · ')),
+                title: Text(
+                  d['name']?.toString() ??
+                      d['product_name']?.toString() ??
+                      'Download',
+                ),
+                subtitle: Text(
+                  [
+                    if (d['file'] != null) d['file'].toString(),
+                    if (remaining != null) 'Remaining: $remaining',
+                  ].join(' · '),
+                ),
                 trailing: const Icon(Icons.open_in_new),
                 onTap: () => _openDownload(d),
               );

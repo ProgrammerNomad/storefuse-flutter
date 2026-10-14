@@ -37,7 +37,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   void _goHomeIfReady(BuildContext context, BootstrapState state) {
-    if (!state.loading && state.error == null && !state.bridgeVersionUnsupported) {
+    if (!state.loading &&
+        state.error == null &&
+        !state.bridgeVersionUnsupported) {
       context.go('/home');
     }
   }
@@ -73,7 +75,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
               StoreLogo(
                 logoUrl: logoUrl,
                 height: 64,
-                fallback: Text(storeName, style: Theme.of(context).textTheme.headlineSmall),
+                fallback: Text(
+                  storeName,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
               ),
               if (tagline != null) ...[
                 const SizedBox(height: 8),
@@ -83,13 +88,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
               const CircularProgressIndicator(),
               const SizedBox(height: 12),
               Text(
-                _showSlowMessage ? 'Taking too long?' : 'Connecting to your store…',
+                _showSlowMessage
+                    ? 'Taking too long?'
+                    : 'Connecting to your store…',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               if (_showSlowMessage) ...[
                 const SizedBox(height: 12),
                 FilledButton.tonal(
-                  onPressed: () => ref.read(bootstrapProvider.notifier).refresh(),
+                  onPressed: () =>
+                      ref.read(bootstrapProvider.notifier).refresh(),
                   child: const Text('Retry'),
                 ),
               ],
@@ -128,7 +136,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
             child: StoreLogo(
               logoUrl: logoUrl,
               height: 64,
-              fallback: Text(storeName, style: Theme.of(context).textTheme.headlineSmall),
+              fallback: Text(
+                storeName,
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
             ),
           );
         },

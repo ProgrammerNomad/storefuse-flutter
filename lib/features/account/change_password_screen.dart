@@ -11,7 +11,8 @@ class ChangePasswordScreen extends ConsumerStatefulWidget {
   const ChangePasswordScreen({super.key});
 
   @override
-  ConsumerState<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
+  ConsumerState<ChangePasswordScreen> createState() =>
+      _ChangePasswordScreenState();
 }
 
 class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
@@ -41,9 +42,9 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
         'new_password': _newPassword.text,
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Password updated')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Password updated')));
         Navigator.pop(context);
       }
     } on StoreFuseApiException catch (e) {
@@ -77,7 +78,9 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
             ),
             TextFormField(
               controller: _confirm,
-              decoration: const InputDecoration(labelText: 'Confirm new password'),
+              decoration: const InputDecoration(
+                labelText: 'Confirm new password',
+              ),
               obscureText: _obscure,
               validator: (v) {
                 if (v != _newPassword.text) return 'Passwords do not match';
@@ -90,7 +93,11 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
               onChanged: (v) => setState(() => _obscure = !v),
             ),
             const SizedBox(height: 16),
-            LoadingButton(label: 'Update password', loading: _loading, onPressed: _submit),
+            LoadingButton(
+              label: 'Update password',
+              loading: _loading,
+              onPressed: _submit,
+            ),
           ],
         ),
       ),

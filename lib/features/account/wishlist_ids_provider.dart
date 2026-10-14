@@ -4,9 +4,10 @@ import '../auth/auth_repository.dart';
 import '../auth/auth_session_provider.dart';
 import '../../core/models/json_helpers.dart';
 
-final wishlistIdsProvider = AsyncNotifierProvider<WishlistIdsNotifier, Set<int>>(
-  WishlistIdsNotifier.new,
-);
+final wishlistIdsProvider =
+    AsyncNotifierProvider<WishlistIdsNotifier, Set<int>>(
+      WishlistIdsNotifier.new,
+    );
 
 class WishlistIdsNotifier extends AsyncNotifier<Set<int>> {
   @override
@@ -20,7 +21,10 @@ class WishlistIdsNotifier extends AsyncNotifier<Set<int>> {
 
   Future<Set<int>> _load() async {
     final items = await ref.read(authRepositoryProvider).wishlist();
-    return items.map((e) => parseInt(e['id'] ?? e['product_id'])).where((id) => id > 0).toSet();
+    return items
+        .map((e) => parseInt(e['id'] ?? e['product_id']))
+        .where((id) => id > 0)
+        .toSet();
   }
 
   Future<void> refresh() async {
@@ -40,5 +44,6 @@ class WishlistIdsNotifier extends AsyncNotifier<Set<int>> {
     state = AsyncData(next);
   }
 
-  bool contains(int productId) => state.valueOrNull?.contains(productId) ?? false;
+  bool contains(int productId) =>
+      state.valueOrNull?.contains(productId) ?? false;
 }

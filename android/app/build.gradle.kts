@@ -29,7 +29,8 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.storefuse.storefuse_app"
+        applicationId = providers.gradleProperty("storefuseApplicationId").orElse("com.storefuse.storefuse_app").get()
+        manifestPlaceholders["storefuseScheme"] = providers.gradleProperty("storefuseScheme").orElse("storefuse").get()
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -54,7 +55,7 @@ android {
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
             } else {
-                signingConfigs.getByName("debug")
+                null
             }
         }
     }
@@ -62,4 +63,19 @@ android {
 
 flutter {
     source = "../.."
+}
+
+// Never silently ship an APK signed with the debug identity.
+gradle.taskGraph.whenReady {
+    val isRelease = allTasks.any { it.name.contains("Release", ignoreCase = true) }
+    if (!isRelease) {
+        return@whenReady
+    }
+    if (!keystorePropertiesFile.exists()) {
+        throw GradleException("Release signing requires android/key.properties and your production keystore. See docs/release.md.")
+    }
+    val storeFilePath = keystoreProperties["storeFile"]?.toString()?.trim().orEmpty()
+    if (storeFilePath.isEmpty() || !file(storeFilePath).exists()) {
+        throw GradleException("Release signing: key.properties storeFile is missing or not found ($storeFilePath). See docs/release.md.")
+    }
 }

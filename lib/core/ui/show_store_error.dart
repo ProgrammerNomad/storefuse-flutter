@@ -5,7 +5,9 @@ import '../api/api_exception.dart';
 /// Back-compat alias used across feature screens.
 class SnackBarHelper {
   static void showMessage(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   static void showException(BuildContext context, StoreFuseApiException error) {
@@ -31,10 +33,7 @@ void showStoreError(
       content: Text(message),
       action: onRetry == null
           ? null
-          : SnackBarAction(
-              label: 'Retry',
-              onPressed: onRetry,
-            ),
+          : SnackBarAction(label: 'Retry', onPressed: onRetry),
     ),
   );
 }

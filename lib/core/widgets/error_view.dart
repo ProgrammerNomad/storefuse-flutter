@@ -10,7 +10,10 @@ class ErrorView extends StatelessWidget {
     this.isOffline = false,
   });
 
-  factory ErrorView.fromException(StoreFuseApiException e, {VoidCallback? onRetry}) {
+  factory ErrorView.fromException(
+    StoreFuseApiException e, {
+    VoidCallback? onRetry,
+  }) {
     return ErrorView(
       message: e.message,
       onRetry: onRetry,

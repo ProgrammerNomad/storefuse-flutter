@@ -21,7 +21,10 @@ class OrdersRepository {
     return (await listPage(page: page, perPage: perPage)).items;
   }
 
-  Future<PaginatedResult<JsonMap>> listPage({int page = 1, int perPage = 10}) async {
+  Future<PaginatedResult<JsonMap>> listPage({
+    int page = 1,
+    int perPage = 10,
+  }) async {
     final client = await _client();
     final data = (await client.getOrders(page: page, perPage: perPage)).data;
     return PaginatedResult.jsonMaps(data);

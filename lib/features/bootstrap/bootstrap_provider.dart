@@ -44,7 +44,8 @@ class BootstrapState {
       settingsData: settingsData ?? this.settingsData,
       cartData: cartData ?? this.cartData,
       error: error,
-      bridgeVersionUnsupported: bridgeVersionUnsupported ?? this.bridgeVersionUnsupported,
+      bridgeVersionUnsupported:
+          bridgeVersionUnsupported ?? this.bridgeVersionUnsupported,
       headlessCheckout: headlessCheckout ?? this.headlessCheckout,
       modules: modules ?? this.modules,
     );
@@ -71,6 +72,7 @@ class BootstrapNotifier extends AsyncNotifier<BootstrapState> {
     state = const AsyncLoading();
     final client = await ref.read(apiClientProvider.future);
     _client = client;
+    client.cache.clear();
     final result = await _runBootstrap(client);
     state = AsyncData(result);
     return result;
@@ -81,8 +83,8 @@ class BootstrapNotifier extends AsyncNotifier<BootstrapState> {
       final status = await client.getStatus();
       final statusData = status.data;
       final bridgeVersion = statusData['version'] as String? ?? '';
-      final unsupported = bridgeVersion.isNotEmpty &&
-          !isBridgeVersionSupported(bridgeVersion);
+      final unsupported =
+          bridgeVersion.isNotEmpty && !isBridgeVersionSupported(bridgeVersion);
       final features = asJsonMap(statusData['features']) ?? {};
       final headless = features['headless_checkout'] == true;
       final modulesRaw = asJsonMap(statusData['modules']) ?? {};
@@ -92,13 +94,16 @@ class BootstrapNotifier extends AsyncNotifier<BootstrapState> {
         throw StoreFuseApiException(message: 'Store is unavailable right now.');
       }
 
-      final settingsFuture = _loadSettings(client);
-      final cartFuture = _loadCart(client);
-      final authFuture = client.authMe().then((_) {}, onError: (_) {});
+      await client.bootstrapNonces();
+      final settingsFuture = modules['settings'] == false
+          ? Future<JsonMap?>.value()
+          : _loadSettings(client);
+      final cartFuture = modules['cart'] == false
+          ? Future<JsonMap?>.value()
+          : _loadCart(client);
 
       final settings = await settingsFuture;
       final cart = await cartFuture;
-      await authFuture;
 
       return BootstrapState(
         loading: false,
@@ -118,35 +123,24 @@ class BootstrapNotifier extends AsyncNotifier<BootstrapState> {
           : ' Check ${env.bridgeBaseUrl} (Android emulator: http://10.0.2.2).';
       return BootstrapState(
         loading: false,
-        error: StoreFuseApiException(message: 'Could not connect to the store.$hint'),
+        error: StoreFuseApiException(
+          message: 'Could not connect to the store.$hint',
+        ),
       );
     }
   }
 
-  Future<JsonMap?> _loadSettings(StoreFuseApiClient client) async {
-    try {
-      return (await client.getSettings()).data;
-    } catch (_) {
-      return null;
-    }
-  }
+  Future<JsonMap?> _loadSettings(StoreFuseApiClient client) async =>
+      (await client.getSettings()).data;
 
-  Future<JsonMap?> _loadCart(StoreFuseApiClient client) async {
-    try {
-      return (await client.getCart()).data;
-    } catch (_) {
-      try {
-        await client.bootstrapNonces();
-        return (await client.getCart()).data;
-      } catch (_) {
-        return null;
-      }
-    }
-  }
+  Future<JsonMap?> _loadCart(StoreFuseApiClient client) async =>
+      (await client.getCart()).data;
 }
 
 final bootstrapProvider =
-    AsyncNotifierProvider<BootstrapNotifier, BootstrapState>(BootstrapNotifier.new);
+    AsyncNotifierProvider<BootstrapNotifier, BootstrapState>(
+      BootstrapNotifier.new,
+    );
 
 final storeNameProvider = Provider<String>((ref) {
   final bootstrap = ref.watch(bootstrapProvider).valueOrNull;
@@ -155,4 +149,6 @@ final storeNameProvider = Provider<String>((ref) {
   return site?['name'] as String? ?? 'StoreFuse';
 });
 
-final minBridgeProvider = Provider<String>((_) => AppEnv.minSupportedBridgeVersion);
+final minBridgeProvider = Provider<String>(
+  (_) => AppEnv.minSupportedBridgeVersion,
+);

@@ -11,10 +11,12 @@ class ProductVariationSelector extends StatefulWidget {
   });
 
   final JsonMap product;
-  final void Function(int? variationId, JsonMap? variation, bool inStock) onChanged;
+  final void Function(int? variationId, JsonMap? variation, bool inStock)
+  onChanged;
 
   @override
-  State<ProductVariationSelector> createState() => _ProductVariationSelectorState();
+  State<ProductVariationSelector> createState() =>
+      _ProductVariationSelectorState();
 }
 
 class _ProductVariationSelectorState extends State<ProductVariationSelector> {
@@ -31,7 +33,8 @@ class _ProductVariationSelectorState extends State<ProductVariationSelector> {
   List<JsonMap> get _variations => asJsonList(widget.product['variations']);
 
   bool get _isVariable =>
-      widget.product['type']?.toString() == 'variable' && _variations.isNotEmpty;
+      widget.product['type']?.toString() == 'variable' &&
+      _variations.isNotEmpty;
 
   List<String> _optionLabels(JsonMap attr) {
     final raw = attr['options'];
@@ -52,7 +55,8 @@ class _ProductVariationSelectorState extends State<ProductVariationSelector> {
       for (final entry in _selected.entries) {
         final key = entry.key;
         final val = entry.value;
-        final variationVal = attrs[key]?.toString() ?? attrs['attribute_$key']?.toString();
+        final variationVal =
+            attrs[key]?.toString() ?? attrs['attribute_$key']?.toString();
         if (variationVal == null || variationVal.isEmpty) continue;
         if (variationVal.toLowerCase() != val.toLowerCase()) {
           ok = false;
@@ -69,7 +73,8 @@ class _ProductVariationSelectorState extends State<ProductVariationSelector> {
       return;
     }
     final id = parseInt(match['id']);
-    final inStock = match['stock_status']?.toString() == 'instock' ||
+    final inStock =
+        match['stock_status']?.toString() == 'instock' ||
         match['stock_status']?.toString() == 'onbackorder';
     widget.onChanged(id, match, inStock);
   }
@@ -82,8 +87,10 @@ class _ProductVariationSelectorState extends State<ProductVariationSelector> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final attr in _attributes) ...[
-          Text(attr['name']?.toString() ?? 'Option',
-              style: Theme.of(context).textTheme.titleSmall),
+          Text(
+            attr['name']?.toString() ?? 'Option',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
           const SizedBox(height: 4),
           Wrap(
             spacing: 8,
@@ -92,9 +99,16 @@ class _ProductVariationSelectorState extends State<ProductVariationSelector> {
               for (final opt in _optionLabels(attr))
                 ChoiceChip(
                   label: Text(opt),
-                  selected: _selected[attr['slug']?.toString() ?? attr['name']?.toString() ?? ''] == opt,
+                  selected:
+                      _selected[attr['slug']?.toString() ??
+                          attr['name']?.toString() ??
+                          ''] ==
+                      opt,
                   onSelected: (_) {
-                    final key = attr['slug']?.toString() ?? attr['name']?.toString() ?? '';
+                    final key =
+                        attr['slug']?.toString() ??
+                        attr['name']?.toString() ??
+                        '';
                     setState(() => _selected[key] = opt);
                     _notify();
                   },

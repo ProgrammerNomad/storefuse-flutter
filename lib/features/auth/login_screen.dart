@@ -1,3 +1,5 @@
+import '../../core/models/json_helpers.dart';
+import '../bootstrap/bootstrap_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -37,10 +39,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _error = null;
     });
     try {
-      await ref.read(authRepositoryProvider).login(
-            email: _email.text.trim(),
-            password: _password.text,
-          );
+      await ref
+          .read(authRepositoryProvider)
+          .login(email: _email.text.trim(), password: _password.text);
       ref.invalidate(authSessionProvider);
       if (mounted) context.pop();
     } on StoreFuseApiException catch (e) {
@@ -76,23 +77,37 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               decoration: InputDecoration(
                 labelText: 'Password',
                 suffixIcon: IconButton(
-                  icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+                  icon: Icon(
+                    _obscure ? Icons.visibility_off : Icons.visibility,
+                  ),
                   onPressed: () => setState(() => _obscure = !_obscure),
                 ),
               ),
               obscureText: _obscure,
-              validator: (v) => (v == null || v.isEmpty) ? 'Password is required' : null,
+              validator: (v) =>
+                  (v == null || v.isEmpty) ? 'Password is required' : null,
             ),
             const SizedBox(height: 16),
-            LoadingButton(label: 'Sign in', loading: _loading, onPressed: _submit),
+            LoadingButton(
+              label: 'Sign in',
+              loading: _loading,
+              onPressed: _submit,
+            ),
             TextButton(
               onPressed: () => context.push('/auth/forgot-password'),
               child: const Text('Forgot password?'),
             ),
-            TextButton(
-              onPressed: () => context.push('/auth/register'),
-              child: const Text('Create account'),
-            ),
+            if (asJsonMap(
+                  ref
+                      .watch(bootstrapProvider)
+                      .valueOrNull
+                      ?.statusData?['features'],
+                )?['registration'] !=
+                false)
+              TextButton(
+                onPressed: () => context.push('/auth/register'),
+                child: const Text('Create account'),
+              ),
           ],
         ),
       ),

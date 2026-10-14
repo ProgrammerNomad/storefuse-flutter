@@ -68,10 +68,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 key: ValueKey(_query),
                 emptyTitle: 'No results',
                 emptyMessage: 'Try a different search term.',
-                loadPage: (page) => ref.read(catalogRepositoryProvider).searchPage(
-                      q: _query,
-                      page: page,
-                    ),
+                loadPage: (page) => ref
+                    .read(catalogRepositoryProvider)
+                    .searchPage(q: _query, page: page),
                 itemBuilder: (context, p, _) => ProductListTile(product: p),
               ),
             ),

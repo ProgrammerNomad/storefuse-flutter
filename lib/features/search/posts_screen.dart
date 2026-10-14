@@ -32,8 +32,9 @@ class _PostsScreenState extends ConsumerState<PostsScreen> {
           key: _listKey,
           physics: const AlwaysScrollableScrollPhysics(),
           emptyTitle: 'No posts yet',
-          loadPage: (page) => ref.read(catalogRepositoryProvider).postsPage(page: page),
-          separatorBuilder: (_, __) => const Divider(height: 1),
+          loadPage: (page) =>
+              ref.read(catalogRepositoryProvider).postsPage(page: page),
+          separatorBuilder: (_, _) => const Divider(height: 1),
           itemBuilder: (context, post, index) {
             final slug = post['slug'] as String? ?? '';
             final title = post['title'] as String? ?? slug;
@@ -43,7 +44,9 @@ class _PostsScreenState extends ConsumerState<PostsScreen> {
               final parsed = DateTime.tryParse(date);
               if (parsed != null) formatted = DateFormat.yMMMd().format(parsed);
             }
-            final image = imageUrl(asJsonMap(post['featured_image'] ?? post['image']));
+            final image = imageUrl(
+              asJsonMap(post['featured_image'] ?? post['image']),
+            );
             return ListTile(
               leading: cachedThumbnail(
                 url: image,
@@ -51,11 +54,15 @@ class _PostsScreenState extends ConsumerState<PostsScreen> {
                 borderRadius: BorderRadius.circular(4),
               ),
               title: Text(title),
-              subtitle: Text([
-                if (formatted != null) formatted,
-                post['author']?.toString(),
-              ].whereType<String>().join(' · ')),
-              onTap: slug.isEmpty ? null : () => context.push('/home/posts/$slug'),
+              subtitle: Text(
+                [
+                  ?formatted,
+                  post['author']?.toString(),
+                ].whereType<String>().join(' · '),
+              ),
+              onTap: slug.isEmpty
+                  ? null
+                  : () => context.push('/home/posts/$slug'),
             );
           },
         ),
@@ -107,22 +114,22 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? ErrorView(message: _error.toString(), onRetry: _load)
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Text(
-                      _post?['title']?.toString() ?? widget.slug,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    if (_post?['date'] != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4, bottom: 12),
-                        child: Text(_post!['date'].toString()),
-                      ),
-                    StoreHtml(html: _post?['content']?.toString() ?? ''),
-                  ],
+          ? ErrorView(message: _error.toString(), onRetry: _load)
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Text(
+                  _post?['title']?.toString() ?? widget.slug,
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
+                if (_post?['date'] != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, bottom: 12),
+                    child: Text(_post!['date'].toString()),
+                  ),
+                StoreHtml(html: _post?['content']?.toString() ?? ''),
+              ],
+            ),
     );
   }
 }

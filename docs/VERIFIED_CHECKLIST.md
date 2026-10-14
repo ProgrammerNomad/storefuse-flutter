@@ -1,27 +1,41 @@
-# Bridge manual session checklist (Phase 7)
+# Live acceptance checklist (audit scenarios 1–12)
 
-Run on a **real device or emulator** against your WordPress site with StoreFuse Bridge **≥ 1.0.2**. Record Bridge and WooCommerce versions here when complete.
+Run on a **real device or emulator** against WordPress + WooCommerce + StoreFuse Bridge **≥ 1.1.0** synced from source (`scripts/deploy-local.ps1`). Record versions in [BASELINE.md](https://github.com/ProgrammerNomad/storefuse-bridge/blob/main/docs/BASELINE.md).
 
-Source: [storefuse-bridge verified-routes.md](https://github.com/ProgrammerNomad/storefuse-bridge/blob/main/docs/verified-routes.md)
-
-Prepare the store first: [local-store-setup.md](local-store-setup.md).
+Prepare the store: [local-store-setup.md](local-store-setup.md) and `scripts/local-fixtures.php`.
 
 ## How to run
 
 1. **Emulator** - `flutter run --dart-define=BRIDGE_BASE_URL=http://10.0.2.2`
 2. **Physical device (same Wi‑Fi)** - `flutter run --dart-define=BRIDGE_BASE_URL=http://<PC-LAN-IP>`
-3. Work through each row below; on failure, trace `lib/core/api/storefuse_client.dart` and the relevant provider (cart, auth, checkout).
-4. Mark **Pass** and add **Notes** (e.g. order key, error code).
+3. Mark each scenario **Pass** with notes (order key, error code, screenshots).
+4. Automated HTTP checks (no device): `python scripts/integration-local.py fixture-credentials.json` (Bridge repo).
+
+## Audit scenarios
+
+| # | Scenario | Pass | Notes |
+|---|----------|------|-------|
+| 1 | Cold start guest session: cart bootstrap, nonces | ☐ | |
+| 2 | Login/logout; session survives restart | ☐ | |
+| 3 | Guest cart → login merges cart | ☐ | |
+| 4 | Account switch / no credential bleed | ☐ | |
+| 5 | Redirect checkout: handoff, WebView, order-received verify | ☐ | |
+| 6 | Headless COD checkout with shipping quote | ☐ | |
+| 7 | Idempotency: retry same checkout / empty cart replay | ☐ | |
+| 8 | Shipping to different address recalculates rates | ☐ | |
+| 9 | Config-driven checkout fields (phone, address_2) | ☐ | |
+| 10 | Close payment WebView early → no false confirmation | ☐ | |
+| 11 | Variation product price/image; module-gated tabs | ☐ | |
+| 12 | Privacy/terms links; account deletion request; CORS denied origin | ☐ | |
+
+## Legacy manual rows (Phase 7)
 
 | Step | Flow | Pass | Notes |
 |------|------|------|-------|
-| 1 | Guest `GET /cart` establishes WC cookies | ☐ | |
-| 2 | Guest add to cart + login merges cart | ☐ | |
-| 3 | Cart survives app restart | ☐ | |
-| 4 | Nonce recovery after invalid cart write | ☐ | Cart provider re-bootstraps WC nonce on `missing_wc_nonce` |
-| 5 | Redirect checkout → order key confirmation | ☐ | Or headless if `headless_checkout: true` |
-| 6 | Logged-in orders list/detail | ☐ | |
-| 7 | Reorder adds lines with WC nonce | ☐ | |
+| A | Guest `GET /cart` establishes WC cookies | ☐ | |
+| B | Nonce recovery after invalid cart write | ☐ | |
+| C | Logged-in orders list/detail | ☐ | |
+| D | Reorder adds lines with WC nonce | ☐ | |
 
 **Environment**
 
@@ -33,15 +47,10 @@ Prepare the store first: [local-store-setup.md](local-store-setup.md).
 
 ## Code-level checks (automated)
 
-These are covered by unit/widget tests and static analysis in CI:
-
-- Envelope parsing and API errors - `test/envelope_test.dart`
-- Store theme color parsing - `test/store_branding_test.dart`
-- Cart badge count from bootstrap cart - `test/cart_badge_test.dart`
-
 ```bash
 flutter analyze --no-fatal-infos
 flutter test
+cd ../storefuse-bridge && vendor/bin/phpunit
 ```
 
-Manual rows above still require a live Bridge + WooCommerce site.
+Manual scenarios above still require a live Bridge + WooCommerce site.

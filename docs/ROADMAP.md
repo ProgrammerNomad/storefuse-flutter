@@ -1,6 +1,6 @@
 # StoreFuse Flutter roadmap
 
-**Planning status:** Documentation and acceptance criteria only. No Flutter app in this repo yet.
+**Implementation status:** Flutter app is present. Core session, checkout, catalog and privacy work is implemented; see [release.md](release.md) for supported features and remaining release gates.
 
 **API gate:** Every endpoint listed below appears in [StoreFuse Bridge verified-routes.md](https://github.com/ProgrammerNomad/storefuse-bridge/blob/main/docs/verified-routes.md).
 
@@ -20,11 +20,11 @@
 ## Cross-cutting policies
 
 - **Cache:** No HTTP cache on cart, auth, account, orders; public catalog may use short in-memory cache only.
-- **Headers:** `X-WC-Nonce` for cart/checkout writes; `X-WP-Nonce` for auth/account writes.
+- **Headers:** `X-WC-Nonce` for cart/checkout writes; `X-WP-Nonce` for authenticated reads and writes.
 - **Customization:** Extra product fields via Bridge filters - [CUSTOMIZATION.md](CUSTOMIZATION.md).
 
 ---
 
 ## Minimum Bridge version
 
-`0.1.0` (`api_version` in JSON matches `STOREFUSE_BRIDGE_VERSION`).
+`1.1.0` (`api_version` in JSON matches `STOREFUSE_BRIDGE_VERSION`).

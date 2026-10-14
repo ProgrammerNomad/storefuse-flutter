@@ -5,7 +5,8 @@ import '../models/paginated_result.dart';
 import 'empty_state_view.dart';
 import 'error_view.dart';
 
-typedef PaginatedPageLoader = Future<PaginatedResult<JsonMap>> Function(int page);
+typedef PaginatedPageLoader =
+    Future<PaginatedResult<JsonMap>> Function(int page);
 
 class PaginatedListView extends StatefulWidget {
   const PaginatedListView({
@@ -22,7 +23,8 @@ class PaginatedListView extends StatefulWidget {
   });
 
   final PaginatedPageLoader loadPage;
-  final Widget Function(BuildContext context, JsonMap item, int index) itemBuilder;
+  final Widget Function(BuildContext context, JsonMap item, int index)
+  itemBuilder;
   final Widget Function(BuildContext context, int index)? separatorBuilder;
   final String emptyTitle;
   final String? emptyMessage;
@@ -68,7 +70,9 @@ class PaginatedListViewState extends State<PaginatedListView> {
   Future<void> refresh() => _loadFirstPage();
 
   void _onScroll() {
-    if (!_scrollController.hasClients || _loadingMore || _initialLoading) return;
+    if (!_scrollController.hasClients || _loadingMore || _initialLoading) {
+      return;
+    }
     if (_page >= _totalPages) return;
     final pos = _scrollController.position;
     if (pos.pixels >= pos.maxScrollExtent - 200) {
@@ -110,7 +114,9 @@ class PaginatedListViewState extends State<PaginatedListView> {
       if (!mounted) return;
       setState(() {
         _items.addAll(result.items);
-        _totalPages = result.meta.totalPages <= 0 ? _page : result.meta.totalPages;
+        _totalPages = result.meta.totalPages <= 0
+            ? _page
+            : result.meta.totalPages;
         _page = next;
         _loadingMore = false;
       });
@@ -144,7 +150,8 @@ class PaginatedListViewState extends State<PaginatedListView> {
         physics: widget.physics ?? const AlwaysScrollableScrollPhysics(),
         shrinkWrap: widget.shrinkWrap,
         itemCount: itemCount,
-        separatorBuilder: widget.separatorBuilder ?? (_, __) => const Divider(height: 1),
+        separatorBuilder:
+            widget.separatorBuilder ?? (_, _) => const Divider(height: 1),
         itemBuilder: (context, index) {
           if (index >= _items.length) {
             return const Padding(

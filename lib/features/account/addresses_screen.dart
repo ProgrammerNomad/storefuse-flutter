@@ -6,6 +6,8 @@ import '../../core/models/json_helpers.dart';
 import '../../core/widgets/address_fields.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../auth/auth_repository.dart';
+import '../bootstrap/bootstrap_provider.dart';
+import '../catalog/storefront_providers.dart';
 
 class AddressesScreen extends ConsumerStatefulWidget {
   const AddressesScreen({super.key});
@@ -23,7 +25,7 @@ class _AddressesScreenState extends ConsumerState<AddressesScreen> {
   final _billAddress1 = TextEditingController();
   final _billCity = TextEditingController();
   final _billPostcode = TextEditingController();
-  final _billCountry = ValueNotifier<String>('IN');
+  final _billCountry = ValueNotifier<String>('');
   final _billState = TextEditingController();
   final _billPhone = TextEditingController();
 
@@ -32,12 +34,23 @@ class _AddressesScreenState extends ConsumerState<AddressesScreen> {
   final _shipAddress1 = TextEditingController();
   final _shipCity = TextEditingController();
   final _shipPostcode = TextEditingController();
-  final _shipCountry = ValueNotifier<String>('IN');
+  final _shipCountry = ValueNotifier<String>('');
   final _shipState = TextEditingController();
+
+  String _defaultCountryCode() {
+    final store = asJsonMap(
+      ref.read(bootstrapProvider).valueOrNull?.settingsData?['store'],
+    );
+    final code = store?['default_country']?.toString();
+    return code != null && code.isNotEmpty ? code : '';
+  }
 
   @override
   void initState() {
     super.initState();
+    final fallback = _defaultCountryCode();
+    _billCountry.value = fallback;
+    _shipCountry.value = fallback;
     _future = _load();
   }
 
@@ -63,12 +76,26 @@ class _AddressesScreenState extends ConsumerState<AddressesScreen> {
 
   Future<JsonMap> _load() async {
     final data = await ref.read(authRepositoryProvider).addresses();
-    _applyAddress(data['billing'], billing: true);
-    _applyAddress(data['shipping'], billing: false);
+    final fallbackCountry =
+        await ref.read(checkoutDefaultCountryProvider.future);
+    _applyAddress(
+      data['billing'],
+      billing: true,
+      fallbackCountry: fallbackCountry,
+    );
+    _applyAddress(
+      data['shipping'],
+      billing: false,
+      fallbackCountry: fallbackCountry,
+    );
     return data;
   }
 
-  void _applyAddress(dynamic raw, {required bool billing}) {
+  void _applyAddress(
+    dynamic raw, {
+    required bool billing,
+    required String fallbackCountry,
+  }) {
     final a = asJsonMap(raw) ?? {};
     if (billing) {
       _billFirst.text = a['first_name']?.toString() ?? '';
@@ -76,7 +103,8 @@ class _AddressesScreenState extends ConsumerState<AddressesScreen> {
       _billAddress1.text = a['address_1']?.toString() ?? '';
       _billCity.text = a['city']?.toString() ?? '';
       _billPostcode.text = a['postcode']?.toString() ?? '';
-      _billCountry.value = a['country']?.toString() ?? 'IN';
+      _billCountry.value =
+          a['country']?.toString() ?? fallbackCountry;
       _billState.text = a['state']?.toString() ?? '';
       _billPhone.text = a['phone']?.toString() ?? '';
     } else {
@@ -85,44 +113,47 @@ class _AddressesScreenState extends ConsumerState<AddressesScreen> {
       _shipAddress1.text = a['address_1']?.toString() ?? '';
       _shipCity.text = a['city']?.toString() ?? '';
       _shipPostcode.text = a['postcode']?.toString() ?? '';
-      _shipCountry.value = a['country']?.toString() ?? 'IN';
+      _shipCountry.value =
+          a['country']?.toString() ?? fallbackCountry;
       _shipState.text = a['state']?.toString() ?? '';
     }
   }
 
   JsonMap _billingBody() => {
-        'first_name': _billFirst.text.trim(),
-        'last_name': _billLast.text.trim(),
-        'address_1': _billAddress1.text.trim(),
-        'city': _billCity.text.trim(),
-        'postcode': _billPostcode.text.trim(),
-        'country': _billCountry.value.trim(),
-        'state': _billState.text.trim(),
-        'phone': _billPhone.text.trim(),
-      };
+    'first_name': _billFirst.text.trim(),
+    'last_name': _billLast.text.trim(),
+    'address_1': _billAddress1.text.trim(),
+    'city': _billCity.text.trim(),
+    'postcode': _billPostcode.text.trim(),
+    'country': _billCountry.value.trim(),
+    'state': _billState.text.trim(),
+    'phone': _billPhone.text.trim(),
+  };
 
   JsonMap _shippingBody() => {
-        'first_name': _shipFirst.text.trim(),
-        'last_name': _shipLast.text.trim(),
-        'address_1': _shipAddress1.text.trim(),
-        'city': _shipCity.text.trim(),
-        'postcode': _shipPostcode.text.trim(),
-        'country': _shipCountry.value.trim(),
-        'state': _shipState.text.trim(),
-      };
+    'first_name': _shipFirst.text.trim(),
+    'last_name': _shipLast.text.trim(),
+    'address_1': _shipAddress1.text.trim(),
+    'city': _shipCity.text.trim(),
+    'postcode': _shipPostcode.text.trim(),
+    'country': _shipCountry.value.trim(),
+    'state': _shipState.text.trim(),
+  };
 
   Future<void> _saveBilling() async {
     setState(() => _saving = true);
     try {
       await ref.read(authRepositoryProvider).updateBilling(_billingBody());
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Billing address saved')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Billing address saved')));
       }
     } on StoreFuseApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -134,13 +165,15 @@ class _AddressesScreenState extends ConsumerState<AddressesScreen> {
     try {
       await ref.read(authRepositoryProvider).updateShipping(_shippingBody());
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Shipping address saved')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Shipping address saved')));
       }
     } on StoreFuseApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } finally {
       if (mounted) setState(() => _saving = false);

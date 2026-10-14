@@ -5,6 +5,8 @@ class NonceStore {
   String? cartToken;
 
   void updateFromHeaders(Map<String, List<String>> headers) {
+    final wp = _firstHeader(headers, 'x-wp-nonce');
+    if (wp != null) wpNonce = wp;
     final wc = _firstHeader(headers, 'x-wc-nonce');
     if (wc != null) wcNonce = wc;
     final token = _firstHeader(headers, 'x-storefuse-cart-token');

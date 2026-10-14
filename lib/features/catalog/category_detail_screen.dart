@@ -13,7 +13,8 @@ class CategoryDetailScreen extends ConsumerStatefulWidget {
   final String slug;
 
   @override
-  ConsumerState<CategoryDetailScreen> createState() => _CategoryDetailScreenState();
+  ConsumerState<CategoryDetailScreen> createState() =>
+      _CategoryDetailScreenState();
 }
 
 class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
@@ -47,7 +48,9 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
         final cat = (await client.getCategory(widget.slug)).data;
         _category = cat;
       }
-      final result = await ref.read(catalogRepositoryProvider).productsPage(
+      final result = await ref
+          .read(catalogRepositoryProvider)
+          .productsPage(
             page: reset ? 1 : _page + 1,
             category: widget.slug,
             perPage: 24,
@@ -83,48 +86,49 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? ErrorView(message: _error.toString(), onRetry: () => _load(reset: true))
-              : RefreshIndicator(
-                  onRefresh: () => _load(reset: true),
-                  child: CustomScrollView(
-                    slivers: [
-                      if (count != null)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Text('$count products'),
-                          ),
-                        ),
-                      SliverGrid(
-                        delegate: SliverChildBuilderDelegate(
-                          (_, i) {
-                            if (i >= _products.length) return null;
-                            return ProductCard(product: _products[i]);
-                          },
-                          childCount: _products.length,
-                        ),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          ? ErrorView(
+              message: _error.toString(),
+              onRetry: () => _load(reset: true),
+            )
+          : RefreshIndicator(
+              onRefresh: () => _load(reset: true),
+              child: CustomScrollView(
+                slivers: [
+                  if (count != null)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text('$count products'),
+                      ),
+                    ),
+                  SliverGrid(
+                    delegate: SliverChildBuilderDelegate((_, i) {
+                      if (i >= _products.length) return null;
+                      return ProductCard(product: _products[i]);
+                    }, childCount: _products.length),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           childAspectRatio: 0.72,
                           crossAxisSpacing: 8,
                           mainAxisSpacing: 8,
                         ),
-                      ),
-                      if (_page < _totalPages)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: _loadingMore
-                                ? const Center(child: CircularProgressIndicator())
-                                : TextButton(
-                                    onPressed: () => _load(reset: false),
-                                    child: const Text('Load more'),
-                                  ),
-                          ),
-                        ),
-                    ],
                   ),
-                ),
+                  if (_page < _totalPages)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: _loadingMore
+                            ? const Center(child: CircularProgressIndicator())
+                            : TextButton(
+                                onPressed: () => _load(reset: false),
+                                child: const Text('Load more'),
+                              ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
     );
   }
 }

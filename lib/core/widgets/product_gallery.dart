@@ -46,7 +46,8 @@ class _ProductGalleryState extends State<ProductGallery> {
             itemBuilder: (_, i) => GestureDetector(
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => _FullscreenGallery(urls: urls, initialIndex: i),
+                  builder: (_) =>
+                      _FullscreenGallery(urls: urls, initialIndex: i),
                 ),
               ),
               child: CachedNetworkImage(imageUrl: urls[i], fit: BoxFit.cover),
@@ -60,7 +61,7 @@ class _ProductGalleryState extends State<ProductGallery> {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: urls.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (_, i) {
                 final selected = i == _index;
                 return GestureDetector(
@@ -83,7 +84,10 @@ class _ProductGalleryState extends State<ProductGallery> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: CachedNetworkImage(imageUrl: urls[i], fit: BoxFit.cover),
+                    child: CachedNetworkImage(
+                      imageUrl: urls[i],
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 );
               },
@@ -130,7 +134,10 @@ class _FullscreenGalleryState extends State<_FullscreenGallery> {
         itemCount: widget.urls.length,
         itemBuilder: (_, i) => InteractiveViewer(
           child: Center(
-            child: CachedNetworkImage(imageUrl: widget.urls[i], fit: BoxFit.contain),
+            child: CachedNetworkImage(
+              imageUrl: widget.urls[i],
+              fit: BoxFit.contain,
+            ),
           ),
         ),
       ),

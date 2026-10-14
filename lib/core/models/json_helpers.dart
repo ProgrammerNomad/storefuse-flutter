@@ -25,6 +25,18 @@ String priceFormatted(JsonMap? price) {
 
 String _decodeHtmlEntities(String input) {
   return input
+      .replaceAllMapped(RegExp(r'&#(x[0-9a-fA-F]+|[0-9]+);'), (m) {
+        final value = m[1]!;
+        final code = value.startsWith('x')
+            ? int.tryParse(value.substring(1), radix: 16)
+            : int.tryParse(value);
+        return code != null && code > 0 && code <= 0x10ffff
+            ? String.fromCharCode(code)
+            : m[0]!;
+      })
+      .replaceAll('&euro;', '€')
+      .replaceAll('&pound;', '£')
+      .replaceAll('&yen;', '¥')
       .replaceAll('&#8377;', '₹')
       .replaceAll('&nbsp;', ' ')
       .replaceAll('&amp;', '&');
@@ -36,6 +48,16 @@ bool productInStock(JsonMap product) {
     return status == 'instock' || status == 'onbackorder';
   }
   return product['is_in_stock'] == true;
+}
+
+bool productOnSale(JsonMap product) {
+  if (product['on_sale'] == true) return true;
+  final regular = asJsonMap(product['regular_price'])?['raw'];
+  final sale = asJsonMap(product['sale_price'])?['raw'];
+  if (regular is num && sale is num && sale > 0 && sale < regular) {
+    return true;
+  }
+  return false;
 }
 
 int parseInt(dynamic v, {int fallback = 0}) {
@@ -81,18 +103,21 @@ String? productThumbnailUrl(JsonMap product) {
   return null;
 }
 
-bool variationAttributeValueMatches(String variationValue, String selectedLabel) {
+bool variationAttributeValueMatches(
+  String variationValue,
+  String selectedLabel,
+) {
   final expected = variationValue.toLowerCase();
   final selected = selectedLabel.toLowerCase();
   final slugified = selected.replaceAll(' ', '-');
-  return expected.isEmpty ||
-      expected == selected ||
-      expected == slugified;
+  return expected.isEmpty || expected == selected || expected == slugified;
 }
 
 /// Flattens Bridge checkout `packages[].methods` into a single method list.
 List<JsonMap> shippingMethodsFromCheckoutData(JsonMap data) {
-  final flat = asJsonList(data['methods'] ?? data['shipping_methods'] ?? data['items']);
+  final flat = asJsonList(
+    data['methods'] ?? data['shipping_methods'] ?? data['items'],
+  );
   if (flat.isNotEmpty) return flat;
 
   final packages = data['packages'];
@@ -113,6 +138,58 @@ List<JsonMap> shippingMethodsFromCheckoutData(JsonMap data) {
   return merged;
 }
 
+bool _variationMatchesPartialSelection({
+  required JsonMap variation,
+  required List<JsonMap> productAttributes,
+  required Map<String, String> selectedOptions,
+}) {
+  final rawAttrs = variation['attributes'];
+  if (rawAttrs is! Map) return false;
+  final varAttrs = Map<String, dynamic>.from(rawAttrs);
+
+  for (final entry in selectedOptions.entries) {
+    if (entry.value.isEmpty) continue;
+    final attr = productAttributes.where(
+      (a) => a['variation'] != false && a['name']?.toString() == entry.key,
+    ).firstOrNull;
+    if (attr == null) continue;
+
+    final slug = attr['slug']?.toString() ?? '';
+    if (slug.isEmpty) return false;
+    final key = slug.startsWith('attribute_') ? slug : 'attribute_$slug';
+    final expected = varAttrs[key]?.toString() ?? '';
+    if (!variationAttributeValueMatches(expected, entry.value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/// True when [optionValue] for [attributeName] can pair with [selectedOptions].
+bool variationOptionIsAvailable({
+  required List<JsonMap> variations,
+  required List<JsonMap> productAttributes,
+  required String attributeName,
+  required String optionValue,
+  required Map<String, String> selectedOptions,
+}) {
+  if (optionValue.isEmpty) return false;
+  final trial = Map<String, String>.from(selectedOptions)..[attributeName] = optionValue;
+
+  for (final variation in variations) {
+    if (variation['purchasable'] == false) continue;
+    if (!productInStock(variation)) continue;
+    if (_variationMatchesPartialSelection(
+      variation: variation,
+      productAttributes: productAttributes,
+      selectedOptions: trial,
+    )) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /// Matches a variable product variation from WC-style attribute maps.
 int? matchProductVariationId({
   required List<JsonMap> variations,
@@ -127,7 +204,9 @@ int? matchProductVariationId({
     final varAttrs = Map<String, dynamic>.from(rawAttrs);
     var matches = true;
 
-    for (final attr in productAttributes) {
+    for (final attr in productAttributes.where(
+      (a) => a['variation'] != false,
+    )) {
       final label = attr['name']?.toString() ?? '';
       final slug = attr['slug']?.toString() ?? '';
       if (label.isEmpty || slug.isEmpty) continue;

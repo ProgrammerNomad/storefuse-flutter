@@ -44,7 +44,8 @@ class _OrderListScreenState extends ConsumerState<OrderListScreen> {
           key: _listKey,
           physics: const AlwaysScrollableScrollPhysics(),
           emptyTitle: 'No orders yet',
-          loadPage: (page) => ref.read(ordersRepositoryProvider).listPage(page: page),
+          loadPage: (page) =>
+              ref.read(ordersRepositoryProvider).listPage(page: page),
           itemBuilder: (context, o, _) {
             final id = parseInt(o['id']);
             final date = o['date_created']?.toString();
@@ -57,10 +58,12 @@ class _OrderListScreenState extends ConsumerState<OrderListScreen> {
             }
             return ListTile(
               title: Text('Order #${o['number'] ?? id}'),
-              subtitle: Text([
-                if (formattedDate != null) formattedDate,
-                asJsonMap(o['total'])?['formatted']?.toString(),
-              ].whereType<String>().join(' · ')),
+              subtitle: Text(
+                [
+                  ?formattedDate,
+                  asJsonMap(o['total'])?['formatted']?.toString(),
+                ].whereType<String>().join(' · '),
+              ),
               trailing: OrderStatusBadge(status: o['status']?.toString() ?? ''),
               onTap: () => context.push('/orders/$id'),
             );

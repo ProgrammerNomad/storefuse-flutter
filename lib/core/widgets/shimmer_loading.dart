@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 
 class ShimmerLoading extends StatefulWidget {
-  const ShimmerLoading({
-    super.key,
-    required this.child,
-    this.enabled = true,
-  });
+  const ShimmerLoading({super.key, required this.child, this.enabled = true});
 
   final Widget child;
   final bool enabled;
@@ -72,10 +68,13 @@ class ProductRowSkeleton extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           itemCount: 4,
-          separatorBuilder: (_, __) => const SizedBox(width: 12),
-          itemBuilder: (_, __) => Container(
+          separatorBuilder: (_, _) => const SizedBox(width: 12),
+          itemBuilder: (_, _) => Container(
             width: 140,
-            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         ),
       ),

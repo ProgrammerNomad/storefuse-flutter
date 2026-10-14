@@ -36,6 +36,65 @@ void main() {
     expect(id, 42);
   });
 
+  test('variationOptionIsAvailable hides impossible combinations', () {
+    const variations = [
+      {
+        'id': '1',
+        'purchasable': true,
+        'stock_status': 'instock',
+        'attributes': {'attribute_pa_color': 'red', 'attribute_pa_size': 's'},
+      },
+      {
+        'id': '2',
+        'purchasable': true,
+        'stock_status': 'instock',
+        'attributes': {'attribute_pa_color': 'blue', 'attribute_pa_size': 'm'},
+      },
+    ];
+    const attrs = [
+      {'name': 'Color', 'slug': 'pa_color', 'variation': true},
+      {'name': 'Size', 'slug': 'pa_size', 'variation': true},
+    ];
+
+    expect(
+      variationOptionIsAvailable(
+        variations: variations,
+        productAttributes: attrs,
+        attributeName: 'Size',
+        optionValue: 'm',
+        selectedOptions: {'Color': 'Red'},
+      ),
+      isFalse,
+    );
+    expect(
+      variationOptionIsAvailable(
+        variations: variations,
+        productAttributes: attrs,
+        attributeName: 'Size',
+        optionValue: 's',
+        selectedOptions: {'Color': 'Red'},
+      ),
+      isTrue,
+    );
+  });
+
+  test('productOnSale uses regular and sale price when on_sale missing', () {
+    expect(
+      productOnSale({
+        'regular_price': {'raw': 100},
+        'sale_price': {'raw': 80},
+      }),
+      isTrue,
+    );
+    expect(
+      productOnSale({
+        'regular_price': {'raw': 100},
+        'sale_price': {'raw': 100},
+      }),
+      isFalse,
+    );
+  });
+
   test('shippingMethodsFromCheckoutData flattens packages', () {
     final methods = shippingMethodsFromCheckoutData({
       'packages': [

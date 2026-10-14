@@ -5,7 +5,7 @@ Native Flutter client for [StoreFuse Bridge](https://github.com/ProgrammerNomad/
 ## Prerequisites
 
 - Flutter stable (3.x)
-- WordPress + WooCommerce + StoreFuse Bridge **≥ 1.0.2** on your site
+- WordPress + WooCommerce + StoreFuse Bridge **≥ 1.1.0** on your site
 - Local smoke: `GET {site}/wp-json/storefuse/v1/status` → `data.status === "ok"`
 
 ## Configure `BRIDGE_BASE_URL`
@@ -72,7 +72,8 @@ CI: [.github/workflows/flutter.yml](.github/workflows/flutter.yml)
 
 - [docs/local-store-setup.md](docs/local-store-setup.md) - seed WooCommerce for E2E testing
 - [docs/release.md](docs/release.md) - prod builds and signing
-- [docs/VERIFIED_CHECKLIST.md](docs/VERIFIED_CHECKLIST.md) - manual session sign-off
+- [docs/VERIFIED_CHECKLIST.md](docs/VERIFIED_CHECKLIST.md) - audit scenarios 1–12 sign-off
+- [docs/push-notifications.md](docs/push-notifications.md) - push/returns capability matrix
 
 ## License
 

@@ -58,7 +58,9 @@ class _PaginatedGridViewState extends State<PaginatedGridView> {
   }
 
   void _onScroll() {
-    if (!_scrollController.hasClients || _loadingMore || _initialLoading) return;
+    if (!_scrollController.hasClients || _loadingMore || _initialLoading) {
+      return;
+    }
     if (_page >= _totalPages) return;
     final pos = _scrollController.position;
     if (pos.pixels >= pos.maxScrollExtent - 200) {
@@ -99,7 +101,9 @@ class _PaginatedGridViewState extends State<PaginatedGridView> {
       if (!mounted) return;
       setState(() {
         _items.addAll(result.items);
-        _totalPages = result.meta.totalPages <= 0 ? _page : result.meta.totalPages;
+        _totalPages = result.meta.totalPages <= 0
+            ? _page
+            : result.meta.totalPages;
         _page = next;
         _loadingMore = false;
       });

@@ -6,6 +6,11 @@ class Product {
     required this.slug,
     required this.name,
     this.type,
+    this.permalink,
+    this.regularPrice,
+    this.salePrice,
+    this.onSale = false,
+    this.purchasable = true,
     this.description,
     this.descriptionHtml,
     this.price,
@@ -19,6 +24,11 @@ class Product {
   final String slug;
   final String name;
   final String? type;
+  final String? permalink;
+  final JsonMap? regularPrice;
+  final JsonMap? salePrice;
+  final bool onSale;
+  final bool purchasable;
   final String? description;
   final String? descriptionHtml;
   final JsonMap? price;
@@ -29,7 +39,7 @@ class Product {
 
   bool get inStock => productInStock(toJson());
 
-  bool get isVariable => type == 'variable' && variations.isNotEmpty;
+  bool get isVariable => type == 'variable';
 
   factory Product.fromJson(JsonMap json) {
     return Product(
@@ -37,6 +47,11 @@ class Product {
       slug: json['slug']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
       type: json['type']?.toString(),
+      permalink: json['permalink']?.toString(),
+      regularPrice: asJsonMap(json['regular_price']),
+      salePrice: asJsonMap(json['sale_price']),
+      onSale: json['on_sale'] == true,
+      purchasable: json['purchasable'] != false,
       description: json['description']?.toString(),
       descriptionHtml: json['description']?.toString(),
       price: asJsonMap(json['price']),
@@ -48,15 +63,19 @@ class Product {
   }
 
   JsonMap toJson() => {
-        'id': id,
-        'slug': slug,
-        'name': name,
-        if (type != null) 'type': type,
-        if (description != null) 'description': description,
-        if (price != null) 'price': price,
-        if (stockStatus != null) 'stock_status': stockStatus,
-        'images': images,
-        'attributes': attributes,
-        'variations': variations,
-      };
+    'id': id,
+    'slug': slug,
+    'name': name,
+    'regular_price': regularPrice,
+    'sale_price': salePrice,
+    'on_sale': onSale,
+    'purchasable': purchasable,
+    if (type != null) 'type': type,
+    if (description != null) 'description': description,
+    if (price != null) 'price': price,
+    if (stockStatus != null) 'stock_status': stockStatus,
+    'images': images,
+    'attributes': attributes,
+    'variations': variations,
+  };
 }

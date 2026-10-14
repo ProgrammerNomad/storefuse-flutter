@@ -48,9 +48,7 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
             if (snapshot.hasError) {
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                children: [
-                  Center(child: Text(snapshot.error.toString())),
-                ],
+                children: [Center(child: Text(snapshot.error.toString()))],
               );
             }
             final items = snapshot.data!;
@@ -58,7 +56,10 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: const [
-                  EmptyStateView(title: 'Wishlist is empty', icon: Icons.favorite_border),
+                  EmptyStateView(
+                    title: 'Wishlist is empty',
+                    icon: Icons.favorite_border,
+                  ),
                 ],
               );
             }
@@ -75,15 +76,22 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
                   leading: cachedThumbnail(url: url, size: 48),
                   title: Text(product['name']?.toString() ?? 'Product'),
                   subtitle: PriceText(price: asJsonMap(product['price'])),
-                  onTap: slug.isEmpty ? null : () => context.push('/products/$slug'),
+                  onTap: slug.isEmpty
+                      ? null
+                      : () => context.push('/products/$slug'),
                   trailing: IconButton(
                     icon: const Icon(Icons.delete_outline),
                     onPressed: () async {
                       try {
-                        await ref.read(authRepositoryProvider).wishlistRemove(productId);
+                        await ref
+                            .read(authRepositoryProvider)
+                            .wishlistRemove(productId);
                         _reload();
                       } on StoreFuseApiException catch (e) {
-                        if (context.mounted) SnackBarHelper.showException(context, e);
+                        if (context.mounted) {
+                          if (!context.mounted) return;
+                          SnackBarHelper.showException(context, e);
+                        }
                       }
                     },
                   ),

@@ -6,7 +6,9 @@ import '../../core/models/json_helpers.dart';
 import '../../core/theme/store_colors.dart';
 import 'bootstrap_provider.dart';
 
-final appEnvFlavorProvider = Provider<AppEnv>((ref) => AppEnv.fromDartDefines());
+final appEnvFlavorProvider = Provider<AppEnv>(
+  (ref) => AppEnv.fromDartDefines(),
+);
 
 final storeLogoUrlProvider = Provider<String?>((ref) {
   final settings = ref.watch(bootstrapProvider).valueOrNull?.settingsData;
@@ -26,8 +28,8 @@ final storeTaglineProvider = Provider<String?>((ref) {
 
 final storeThemeSeedProvider = Provider<Color>((ref) {
   final settings = ref.watch(bootstrapProvider).valueOrNull?.settingsData;
-  final header = asJsonMap(settings?['header']);
-  return parseStoreSeedColor(header?['announcement_bar_bg_color'] as String?);
+  final app = asJsonMap(settings?['app']);
+  return parseStoreSeedColor(app?['primary_color'] as String?);
 });
 
 final storeThemeProvider = Provider<ThemeData>((ref) {

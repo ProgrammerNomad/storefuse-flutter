@@ -1,6 +1,8 @@
 # Local WooCommerce store lab (XAMPP)
 
-Use this checklist to seed a **real catalog** on `http://localhost/` so the Flutter app can run end-to-end flows. No automation is required-configure everything in **WP Admin**.
+Use this checklist to seed a **real catalog** on `http://localhost/` so the Flutter app can run end-to-end flows.
+
+**Automated option (loopback only):** from the bridge repo, run `./scripts/deploy-local.ps1` then `php scripts/local-fixtures.php <wordpress-path> "$env:TEMP\storefuse-fixtures"`. See [BASELINE.md](../../storefuse-bridge/docs/BASELINE.md). The manual steps below still apply if you prefer WP Admin.
 
 ## Prerequisites
 

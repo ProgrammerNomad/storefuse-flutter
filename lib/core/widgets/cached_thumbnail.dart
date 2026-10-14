@@ -16,7 +16,8 @@ Widget cachedThumbnail({
       width: size,
       height: size,
       fit: BoxFit.cover,
-      errorWidget: (_, __, ___) => Icon(Icons.broken_image_outlined, size: size * 0.6),
+      errorWidget: (_, _, _) =>
+          Icon(Icons.broken_image_outlined, size: size * 0.6),
     ),
   );
 }

@@ -44,28 +44,53 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('Sort & filter', style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                        'Sort & filter',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String?>(
-                        value: orderby,
+                        initialValue: orderby,
                         decoration: const InputDecoration(labelText: 'Sort by'),
                         items: const [
-                          DropdownMenuItem(value: null, child: Text('Default')),
-                          DropdownMenuItem(value: 'date', child: Text('Newest')),
-                          DropdownMenuItem(value: 'price', child: Text('Price')),
-                          DropdownMenuItem(value: 'popularity', child: Text('Popularity')),
-                          DropdownMenuItem(value: 'rating', child: Text('Rating')),
+                          DropdownMenuItem(
+                            value: null,
+                            child: Text('Recommended'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'date',
+                            child: Text('Newest'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'price',
+                            child: Text('Price'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'popularity',
+                            child: Text('Popularity'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'rating',
+                            child: Text('Rating'),
+                          ),
                         ],
                         onChanged: (v) => setModalState(() => orderby = v),
                       ),
                       DropdownButtonFormField<String>(
-                        value: order,
+                        initialValue: order,
                         decoration: const InputDecoration(labelText: 'Order'),
                         items: const [
-                          DropdownMenuItem(value: 'desc', child: Text('Descending')),
-                          DropdownMenuItem(value: 'asc', child: Text('Ascending')),
+                          DropdownMenuItem(
+                            value: 'desc',
+                            child: Text('Highest / newest first'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'asc',
+                            child: Text('Lowest / oldest first'),
+                          ),
                         ],
-                        onChanged: (v) => setModalState(() => order = v ?? 'desc'),
+                        onChanged: (v) =>
+                            setModalState(() => order = v ?? 'desc'),
                       ),
                       SwitchListTile(
                         value: onSale,
@@ -78,7 +103,9 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                           Expanded(
                             child: TextField(
                               controller: minCtrl,
-                              decoration: const InputDecoration(labelText: 'Min price'),
+                              decoration: const InputDecoration(
+                                labelText: 'Min price',
+                              ),
                               keyboardType: TextInputType.number,
                             ),
                           ),
@@ -86,7 +113,9 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                           Expanded(
                             child: TextField(
                               controller: maxCtrl,
-                              decoration: const InputDecoration(labelText: 'Max price'),
+                              decoration: const InputDecoration(
+                                labelText: 'Max price',
+                              ),
                               keyboardType: TextInputType.number,
                             ),
                           ),
@@ -141,7 +170,9 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           emptyTitle: 'No products yet',
           emptyMessage: 'Check back soon for new items.',
-          loadPage: (page) => ref.read(catalogRepositoryProvider).productsPage(
+          loadPage: (page) => ref
+              .read(catalogRepositoryProvider)
+              .productsPage(
                 page: page,
                 category: widget.categorySlug,
                 orderby: _orderby,
@@ -150,7 +181,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                 maxPrice: _maxPrice,
                 onSale: _onSaleOnly ? true : null,
               ),
-          separatorBuilder: (_, __) => const Divider(height: 1),
+          separatorBuilder: (_, _) => const Divider(height: 1),
           itemBuilder: (context, p, _) => ProductListTile(product: p),
         ),
       ),

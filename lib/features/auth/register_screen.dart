@@ -42,7 +42,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       _error = null;
     });
     try {
-      await ref.read(authRepositoryProvider).register(
+      await ref
+          .read(authRepositoryProvider)
+          .register(
             email: _email.text.trim(),
             password: _password.text,
             firstName: _firstName.text.trim(),
@@ -64,52 +66,56 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       body: Form(
         key: _formKey,
         child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (_error != null) ErrorView.fromException(_error!),
-          TextFormField(
-            controller: _firstName,
-            decoration: const InputDecoration(labelText: 'First name'),
-          ),
-          TextFormField(
-            controller: _lastName,
-            decoration: const InputDecoration(labelText: 'Last name'),
-          ),
-          TextFormField(
-            controller: _email,
-            decoration: const InputDecoration(labelText: 'Email'),
-            validator: (v) {
-              final t = v?.trim() ?? '';
-              if (t.isEmpty) return 'Email required';
-              if (!t.contains('@')) return 'Invalid email';
-              return null;
-            },
-          ),
-          TextFormField(
-            controller: _password,
-            decoration: InputDecoration(
-              labelText: 'Password',
-              suffixIcon: IconButton(
-                icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
-                onPressed: () => setState(() => _obscure = !_obscure),
-              ),
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (_error != null) ErrorView.fromException(_error!),
+            TextFormField(
+              controller: _firstName,
+              decoration: const InputDecoration(labelText: 'First name'),
             ),
-            obscureText: _obscure,
-            validator: (v) => (v == null || v.length < 6) ? 'Min 6 characters' : null,
-          ),
-          TextFormField(
-            controller: _confirm,
-            decoration: const InputDecoration(labelText: 'Confirm password'),
-            obscureText: _obscure,
-            validator: (v) => v != _password.text ? 'Passwords must match' : null,
-          ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: _loading ? null : _submit,
-            child: const Text('Create account'),
-          ),
-        ],
-      ),
+            TextFormField(
+              controller: _lastName,
+              decoration: const InputDecoration(labelText: 'Last name'),
+            ),
+            TextFormField(
+              controller: _email,
+              decoration: const InputDecoration(labelText: 'Email'),
+              validator: (v) {
+                final t = v?.trim() ?? '';
+                if (t.isEmpty) return 'Email required';
+                if (!t.contains('@')) return 'Invalid email';
+                return null;
+              },
+            ),
+            TextFormField(
+              controller: _password,
+              decoration: InputDecoration(
+                labelText: 'Password',
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscure ? Icons.visibility : Icons.visibility_off,
+                  ),
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                ),
+              ),
+              obscureText: _obscure,
+              validator: (v) =>
+                  (v == null || v.length < 6) ? 'Min 6 characters' : null,
+            ),
+            TextFormField(
+              controller: _confirm,
+              decoration: const InputDecoration(labelText: 'Confirm password'),
+              obscureText: _obscure,
+              validator: (v) =>
+                  v != _password.text ? 'Passwords must match' : null,
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _loading ? null : _submit,
+              child: const Text('Create account'),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -7,6 +7,7 @@ import '../../core/models/json_helpers.dart';
 import '../../core/routing/store_href.dart';
 import '../../core/theme/store_colors.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/error_view.dart';
 import '../../core/widgets/product_card.dart';
 import '../../core/widgets/shimmer_loading.dart' show ProductRowSkeleton;
 import '../bootstrap/bootstrap_provider.dart';
@@ -25,20 +26,19 @@ class HomeScreen extends ConsumerWidget {
 
     return AppScaffold(
       title: name,
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.search),
-          onPressed: () => context.push('/search'),
-        ),
-      ],
+
       body: homepageAsync.when(
         loading: () => const ProductRowSkeleton(),
-        error: (e, _) => _FallbackHome(name: name, tagline: tagline, showDevInfo: showDevInfo),
+        error: (e, _) => ErrorView(
+          message: e.toString(),
+          onRetry: () => ref.invalidate(homepageProvider),
+        ),
         data: (homepage) => RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(homepageProvider);
             ref.invalidate(homepageBestSellersProvider);
             ref.invalidate(homepageNewArrivalsProvider);
+            await ref.read(bootstrapProvider.notifier).refresh();
             await ref.read(homepageProvider.future);
           },
           child: _HomepageBody(
@@ -68,28 +68,38 @@ class _HomepageBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final announcement = asJsonMap(homepage['announcement_bar']);
-    final hero = asJsonMap(homepage['hero']) ?? {};
+    final merch = ref.watch(homepageMerchandisingProvider);
+    final announcement = merch.announcement;
+    final hero = merch.hero;
     final featured = asJsonList(homepage['featured_categories']);
-    final promo = asJsonMap(homepage['promo_banner']);
-    final bestHeading =
-        asJsonMap(homepage['best_sellers'])?['heading']?.toString() ?? 'Best Sellers';
-    final newHeading =
-        asJsonMap(homepage['new_arrivals'])?['heading']?.toString() ?? 'New Arrivals';
+    final promo = merch.promo;
+    final bestHeading = merch.bestSellersHeading;
+    final newHeading = merch.newArrivalsHeading;
 
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
       children: [
         if (announcement?['enabled'] == true &&
             (announcement?['text']?.toString().isNotEmpty ?? false))
           Material(
             color: parseStoreSeedColor(announcement?['bg_color']?.toString()),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Text(
-                announcement!['text'].toString(),
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white),
-                textAlign: TextAlign.center,
+            child: InkWell(
+              onTap: announcement?['link']?.toString().isNotEmpty == true
+                  ? () => _openHref(context, announcement?['link']?.toString())
+                  : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                child: Text(
+                  announcement!['text'].toString(),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: Colors.white),
+                  textAlign: TextAlign.center,
+                ),
               ),
             ),
           ),
@@ -98,19 +108,33 @@ class _HomepageBody extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (hero['badge_text']?.toString().isNotEmpty == true)
+                Chip(label: Text(hero['badge_text'].toString())),
               if (hero['headline'] != null)
                 Text(
                   hero['headline'].toString(),
                   style: Theme.of(context).textTheme.headlineSmall,
                 )
               else
-                Text('Welcome to $name', style: Theme.of(context).textTheme.headlineSmall),
+                Text(
+                  'Welcome to $name',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+              if (hero['headline_highlight']?.toString().isNotEmpty == true)
+                Text(
+                  hero['headline_highlight'].toString(),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              if (hero['subheadline']?.toString().isNotEmpty == true)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(hero['subheadline'].toString()),
+                ),
               if (tagline != null) ...[
                 const SizedBox(height: 8),
                 Text(tagline!),
-              ] else if (hero['subheadline'] != null) ...[
-                const SizedBox(height: 8),
-                Text(hero['subheadline'].toString()),
               ],
               const SizedBox(height: 16),
               Wrap(
@@ -118,12 +142,21 @@ class _HomepageBody extends ConsumerWidget {
                 runSpacing: 12,
                 children: [
                   FilledButton(
-                    onPressed: () => _openHref(context, hero['cta_primary_href']?.toString()),
-                    child: Text(hero['cta_primary_label']?.toString() ?? 'Shop products'),
+                    onPressed: () => _openHref(
+                      context,
+                      hero['cta_primary_href']?.toString(),
+                    ),
+                    child: Text(
+                      hero['cta_primary_label']?.toString() ?? 'Shop products',
+                    ),
                   ),
-                  if (hero['cta_secondary_label']?.toString().isNotEmpty ?? false)
+                  if (hero['cta_secondary_label']?.toString().isNotEmpty ??
+                      false)
                     OutlinedButton(
-                      onPressed: () => _openHref(context, hero['cta_secondary_href']?.toString()),
+                      onPressed: () => _openHref(
+                        context,
+                        hero['cta_secondary_href']?.toString(),
+                      ),
                       child: Text(hero['cta_secondary_label'].toString()),
                     ),
                 ],
@@ -138,7 +171,10 @@ class _HomepageBody extends ConsumerWidget {
               borderRadius: BorderRadius.circular(12),
               child: AspectRatio(
                 aspectRatio: 16 / 9,
-                child: CachedNetworkImage(imageUrl: _heroImageUrl(hero)!, fit: BoxFit.cover),
+                child: CachedNetworkImage(
+                  imageUrl: _heroImageUrl(hero)!,
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
           ),
@@ -150,15 +186,18 @@ class _HomepageBody extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               scrollDirection: Axis.horizontal,
               itemCount: featured.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
               itemBuilder: (context, i) {
                 final cat = featured[i];
                 final slug = cat['slug']?.toString();
                 return InkWell(
-                  onTap: slug == null ? null : () => context.push('/categories/$slug'),
+                  onTap: slug == null
+                      ? null
+                      : () => context.push('/categories/$slug'),
                   child: SizedBox(
                     width: 100,
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Expanded(
                           child: ClipRRect(
@@ -170,7 +209,9 @@ class _HomepageBody extends ConsumerWidget {
                                     fit: BoxFit.cover,
                                   )
                                 : ColoredBox(
-                                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.surfaceContainerHighest,
                                     child: const Icon(Icons.category),
                                   ),
                           ),
@@ -196,7 +237,10 @@ class _HomepageBody extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Material(
-              color: parseStoreSeedColor(promo?['bg_color']?.toString(), fallback: const Color(0xFF1e293b)),
+              color: parseStoreSeedColor(
+                promo?['bg_color']?.toString(),
+                fallback: const Color(0xFF1e293b),
+              ),
               borderRadius: BorderRadius.circular(12),
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -206,16 +250,25 @@ class _HomepageBody extends ConsumerWidget {
                     if (promo?['headline'] != null)
                       Text(
                         promo!['headline'].toString(),
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.titleMedium?.copyWith(color: Colors.white),
                       ),
                     if (promo?['body'] != null)
-                      Text(promo!['body'].toString(), style: const TextStyle(color: Colors.white70)),
+                      Text(
+                        promo!['body'].toString(),
+                        style: const TextStyle(color: Colors.white70),
+                      ),
                     if (asJsonMap(promo?['cta'])?['label'] != null) ...[
                       const SizedBox(height: 8),
                       TextButton(
-                        onPressed: () =>
-                            _openHref(context, asJsonMap(promo?['cta'])?['href']?.toString()),
-                        child: Text(asJsonMap(promo?['cta'])!['label'].toString()),
+                        onPressed: () => _openHref(
+                          context,
+                          asJsonMap(promo?['cta'])?['href']?.toString(),
+                        ),
+                        child: Text(
+                          asJsonMap(promo?['cta'])!['label'].toString(),
+                        ),
                       ),
                     ],
                   ],
@@ -224,13 +277,28 @@ class _HomepageBody extends ConsumerWidget {
             ),
           ),
         ],
-        _ProductRow(
-          title: bestHeading,
-          provider: homepageBestSellersProvider,
-        ),
-        _ProductRow(
-          title: newHeading,
-          provider: homepageNewArrivalsProvider,
+        for (final field in ['rating_text', 'shipping_text'])
+          if (hero[field]?.toString().isNotEmpty == true)
+            ListTile(
+              leading: Icon(
+                field == 'rating_text'
+                    ? Icons.star_outline
+                    : Icons.local_shipping_outlined,
+              ),
+              title: Text(hero[field].toString()),
+            ),
+        for (final item in merch.trustItems)
+          if (item['enabled'] != false)
+            ListTile(
+              leading: const Icon(Icons.verified_outlined),
+              title: Text(item['title']?.toString() ?? ''),
+              subtitle: Text(item['description']?.toString() ?? ''),
+            ),
+        _ProductRow(title: bestHeading, provider: homepageBestSellersProvider),
+        _ProductRow(title: newHeading, provider: homepageNewArrivalsProvider),
+        _EmptyCatalogHint(
+          bestProvider: homepageBestSellersProvider,
+          newProvider: homepageNewArrivalsProvider,
         ),
         if (showDevInfo) ...[
           const SizedBox(height: 24),
@@ -278,6 +346,37 @@ class _HomepageBody extends ConsumerWidget {
   }
 }
 
+class _EmptyCatalogHint extends ConsumerWidget {
+  const _EmptyCatalogHint({
+    required this.bestProvider,
+    required this.newProvider,
+  });
+
+  final FutureProvider<List<JsonMap>> bestProvider;
+  final FutureProvider<List<JsonMap>> newProvider;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final best = ref.watch(bestProvider).valueOrNull;
+    final newest = ref.watch(newProvider).valueOrNull;
+    if (best == null || newest == null) return const SizedBox.shrink();
+    if (best.isNotEmpty || newest.isNotEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'No products are visible yet. Seed the store with '
+            'storefuse-bridge/scripts/local-fixtures.php or add catalog items in WooCommerce.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ProductRow extends ConsumerWidget {
   const _ProductRow({required this.title, required this.provider});
 
@@ -289,7 +388,14 @@ class _ProductRow extends ConsumerWidget {
     final productsAsync = ref.watch(provider);
     return productsAsync.when(
       loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => ListTile(
+        title: Text('Unable to load $title'),
+        trailing: IconButton(
+          tooltip: 'Retry',
+          icon: const Icon(Icons.refresh),
+          onPressed: () => ref.invalidate(provider),
+        ),
+      ),
       data: (products) {
         if (products.isEmpty) return const SizedBox.shrink();
         return Column(
@@ -297,62 +403,27 @@ class _ProductRow extends ConsumerWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-              child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+              child: Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
             ),
             SizedBox(
-              height: 272,
+              height: 220 + 80 * MediaQuery.textScalerOf(context).scale(1),
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 scrollDirection: Axis.horizontal,
                 itemCount: products.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (_, i) => SizedBox(width: 160, child: ProductCard(product: products[i])),
+                separatorBuilder: (_, _) => const SizedBox(width: 12),
+                itemBuilder: (_, i) => SizedBox(
+                  width: 160,
+                  child: ProductCard(product: products[i]),
+                ),
               ),
             ),
           ],
         );
       },
-    );
-  }
-}
-
-class _FallbackHome extends StatelessWidget {
-  const _FallbackHome({
-    required this.name,
-    required this.tagline,
-    required this.showDevInfo,
-  });
-
-  final String name;
-  final String? tagline;
-  final bool showDevInfo;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text('Welcome to $name', style: Theme.of(context).textTheme.headlineSmall),
-        if (tagline != null) ...[
-          const SizedBox(height: 8),
-          Text(tagline!),
-        ],
-        const SizedBox(height: 24),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            FilledButton(
-              onPressed: () => context.push('/products'),
-              child: const Text('Shop products'),
-            ),
-            OutlinedButton(
-              onPressed: () => context.push('/categories'),
-              child: const Text('Categories'),
-            ),
-          ],
-        ),
-      ],
     );
   }
 }

@@ -18,7 +18,11 @@ class MemoryCache {
     return entry.value as T;
   }
 
-  void set<T>(String key, T value, {Duration ttl = const Duration(minutes: 2)}) {
+  void set<T>(
+    String key,
+    T value, {
+    Duration ttl = const Duration(minutes: 2),
+  }) {
     _store[key] = MemoryCacheEntry(value, DateTime.now().add(ttl));
   }
 

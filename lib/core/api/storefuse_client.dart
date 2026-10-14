@@ -1,10 +1,13 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import '../session/secure_cookie_storage.dart';
 
 import '../../config/env.dart';
 import '../cache/memory_cache.dart';
@@ -20,57 +23,111 @@ class StoreFuseApiClient {
     required this.cache,
     Dio? dio,
     CookieJar? cookieJar,
-  })  : _dio = dio ?? Dio(),
-        _cookieJar = cookieJar {
+  }) : _dio = dio ?? Dio(),
+       _cookieJar = cookieJar {
     _dio.options.baseUrl = env.apiBaseUrl;
     _dio.options.connectTimeout = env.connectTimeout;
     _dio.options.receiveTimeout = env.receiveTimeout;
     _dio.options.headers['Accept'] = 'application/json';
     if (_cookieJar != null) {
-      _dio.interceptors.add(CookieManager(_cookieJar!));
+      _dio.interceptors.add(CookieManager(_cookieJar));
     }
-    if (env.enableHttpLogs) {
-      _dio.interceptors.add(LogInterceptor(requestBody: true, responseBody: false));
-    }
-    _dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) {
-        if (_isNoStorePath(options.path)) {
-          options.headers['Cache-Control'] = 'no-store';
-        }
-        final token = nonces.cartToken;
-        if (token != null && token.isNotEmpty) {
-          options.headers['X-StoreFuse-Cart-Token'] = token;
-        }
-        handler.next(options);
-      },
-      onResponse: (response, handler) {
-        nonces.updateFromHeaders(response.headers.map);
-        final data = response.data;
-        if (data is Map<String, dynamic>) {
-          final inner = data['data'];
-          if (inner is Map<String, dynamic>) {
-            nonces.updateFromJson(inner);
+    // Request bodies, cookies, nonces and reset/order keys must never be logged.
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          options.cancelToken ??= _sessionRequests;
+          final wp = nonces.wpNonce;
+          if (wp != null && wp.isNotEmpty) {
+            options.headers['X-WP-Nonce'] = wp;
           }
-        }
-        handler.next(response);
-      },
-    ));
+          if (_isNoStorePath(options.path)) {
+            options.headers['Cache-Control'] = 'no-store';
+          }
+          final token = nonces.cartToken;
+          if (token != null && token.isNotEmpty) {
+            options.headers['X-StoreFuse-Cart-Token'] = token;
+          }
+          handler.next(options);
+        },
+        onError: (error, handler) async {
+          final body = error.response?.data;
+          final code = body is Map
+              ? (body['error'] is Map ? body['error']['code'] : body['code'])
+              : null;
+          final request = error.requestOptions;
+          if ({'invalid_nonce', 'rest_cookie_invalid_nonce'}.contains(code) &&
+              request.extra['nonceRetried'] != true) {
+            try {
+              await bootstrapNonces();
+              request.extra['nonceRetried'] = true;
+              request.headers['X-WP-Nonce'] = nonces.wpNonce;
+              if (request.headers.containsKey('X-WC-Nonce')) {
+                request.headers['X-WC-Nonce'] = nonces.wcNonce;
+              }
+              return handler.resolve(await _dio.fetch<dynamic>(request));
+            } catch (_) {
+              // Surface the original failed request; never retry payment errors.
+            }
+          }
+          handler.next(error);
+        },
+        onResponse: (response, handler) {
+          nonces.updateFromHeaders(response.headers.map);
+          response.data = _resolveDevelopmentUrls(response.data);
+          final data = response.data;
+          if (data is Map<String, dynamic>) {
+            final inner = data['data'];
+            if (inner is Map<String, dynamic>) {
+              nonces.updateFromJson(inner);
+            }
+          }
+          handler.next(response);
+        },
+      ),
+    );
+    if (env.enableHttpLogs) {
+      if (!kDebugMode) {
+        throw StateError('ENABLE_HTTP_LOGS is only supported in debug builds');
+      }
+      _dio.interceptors.add(
+        LogInterceptor(
+          requestBody: false,
+          responseBody: false,
+          requestHeader: false,
+          responseHeader: false,
+        ),
+      );
+    }
   }
 
   final AppEnv env;
   final NonceStore nonces;
   final MemoryCache cache;
   final Dio _dio;
-  CookieJar? _cookieJar;
+  final CookieJar? _cookieJar;
+  CancelToken _sessionRequests = CancelToken();
+  Future<void>? _refreshSession;
 
   static Future<StoreFuseApiClient> create(AppEnv env) async {
-    CookieJar? jar;
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final flavorDir = '${dir.path}/cookies_${env.flavor}';
-      jar = PersistCookieJar(storage: FileStorage(flavorDir));
-    } catch (_) {
-      jar = CookieJar();
+    final jar = PersistCookieJar(
+      storage: SecureCookieStorage('${env.flavor}|${env.bridgeBaseUrl}'),
+      deleteHostCookiesWhenLoadFailed: false,
+    );
+    await jar.forceInit();
+    env.validate();
+    // Remove only the two known legacy cookie stores inside this app's sandbox.
+    final documents = await getApplicationDocumentsDirectory();
+    for (final name in ['cookies_dev', 'cookies_prod']) {
+      final legacy = Directory('${documents.path}/$name');
+      if (await FileSystemEntity.type(legacy.path, followLinks: false) ==
+          FileSystemEntityType.directory) {
+        final parent = await documents.resolveSymbolicLinks();
+        final resolved = await legacy.resolveSymbolicLinks();
+        if (resolved.startsWith('$parent${Platform.pathSeparator}')) {
+          await legacy.delete(recursive: true);
+        }
+      }
     }
     return StoreFuseApiClient(
       env: env,
@@ -78,6 +135,17 @@ class StoreFuseApiClient {
       cache: MemoryCache(),
       cookieJar: jar,
     );
+  }
+
+  dynamic _resolveDevelopmentUrls(dynamic data) {
+    if (data is String) return env.resolveStoreUrl(data);
+    if (data is List) return data.map(_resolveDevelopmentUrls).toList();
+    if (data is Map<String, dynamic>) {
+      return data.map(
+        (key, value) => MapEntry(key, _resolveDevelopmentUrls(value)),
+      );
+    }
+    return data;
   }
 
   bool _isNoStorePath(String path) {
@@ -127,12 +195,17 @@ class StoreFuseApiClient {
   }
 
   Future<void> clearSessionCookies() async {
+    _sessionRequests.cancel('Session ended');
+    _sessionRequests = CancelToken();
     await _cookieJar?.deleteAll();
     nonces.clear();
+    cache.clear();
+    await _sessionStorage.delete('checkout_attempt');
+    await _sessionStorage.delete('last_order_key');
   }
 
   static String generateIdempotencyKey() {
-    final random = Random();
+    final random = Random.secure();
     return 'sf-${DateTime.now().millisecondsSinceEpoch}-'
         '${random.nextInt(0x7fffffff).toRadixString(16)}';
   }
@@ -228,7 +301,8 @@ class StoreFuseApiClient {
   }
 
   StoreFuseApiException _mapDioError(DioException e) {
-    final connectionFailed = e.error is SocketException ||
+    final connectionFailed =
+        e.error is SocketException ||
         e.type == DioExceptionType.connectionError ||
         e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.receiveTimeout ||
@@ -237,7 +311,7 @@ class StoreFuseApiClient {
       final devHint = env.isProd
           ? ''
           : ' Cannot reach store at ${env.bridgeBaseUrl}. '
-              'Start XAMPP (Apache) and on Android emulator use http://10.0.2.2.';
+                'Start XAMPP (Apache) and on Android emulator use http://10.0.2.2.';
       return StoreFuseApiException(
         message: 'You appear to be offline. Check your connection.$devHint',
         isOffline: true,
@@ -256,17 +330,17 @@ class StoreFuseApiClient {
   }
 
   Future<EnvelopeResult<JsonMap>> getSettings() async {
-    final json = await _getEnvelope('/settings', useCache: true);
+    final json = await _getEnvelope('/settings', useCache: false);
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
   Future<EnvelopeResult<JsonMap>> getHomepage() async {
-    final json = await _getEnvelope('/homepage', useCache: true);
+    final json = await _getEnvelope('/homepage', useCache: false);
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
   Future<EnvelopeResult<JsonMap>> getNavigation() async {
-    final json = await _getEnvelope('/navigation', useCache: true);
+    final json = await _getEnvelope('/navigation', useCache: false);
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
@@ -281,38 +355,40 @@ class StoreFuseApiClient {
     num? maxPrice,
     bool? onSale,
     bool? featured,
+    List<int>? include,
   }) async {
     final json = await _getEnvelope(
       '/products',
       query: {
         'page': page,
         'per_page': perPage,
-        if (category != null) 'category': category,
-        if (tag != null) 'tag': tag,
-        if (orderby != null) 'orderby': orderby,
-        if (order != null) 'order': order,
-        if (minPrice != null) 'min_price': minPrice,
-        if (maxPrice != null) 'max_price': maxPrice,
+        'category': ?category,
+        'tag': ?tag,
+        'orderby': ?orderby,
+        'order': ?order,
+        'min_price': ?minPrice,
+        'max_price': ?maxPrice,
         if (onSale == true) 'on_sale': true,
         if (featured == true) 'featured': true,
+        if (include != null) 'include': include.join(','),
       },
-      useCache: true,
+      useCache: false,
     );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
   Future<EnvelopeResult<JsonMap>> getProduct(String slug) async {
-    final json = await _getEnvelope('/products/$slug', useCache: true);
+    final json = await _getEnvelope('/products/$slug', useCache: false);
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
   Future<EnvelopeResult<JsonMap>> getCategories() async {
-    final json = await _getEnvelope('/categories', useCache: true);
+    final json = await _getEnvelope('/categories', useCache: false);
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
   Future<EnvelopeResult<JsonMap>> getCategory(String slug) async {
-    final json = await _getEnvelope('/categories/$slug', useCache: true);
+    final json = await _getEnvelope('/categories/$slug', useCache: false);
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
@@ -329,22 +405,26 @@ class StoreFuseApiClient {
   }
 
   Future<EnvelopeResult<JsonMap>> getAttributes() async {
-    final json = await _getEnvelope('/attributes', useCache: true);
+    final json = await _getEnvelope('/attributes', useCache: false);
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
   Future<EnvelopeResult<JsonMap>> getTags() async {
-    final json = await _getEnvelope('/tags', useCache: true);
+    final json = await _getEnvelope('/tags', useCache: false);
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
   Future<EnvelopeResult<JsonMap>> getPosts({int page = 1}) async {
-    final json = await _getEnvelope('/posts', query: {'page': page}, useCache: true);
+    final json = await _getEnvelope(
+      '/posts',
+      query: {'page': page},
+      useCache: false,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
   Future<EnvelopeResult<JsonMap>> getPost(String slug) async {
-    final json = await _getEnvelope('/posts/$slug', useCache: true);
+    final json = await _getEnvelope('/posts/$slug', useCache: false);
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
@@ -352,7 +432,7 @@ class StoreFuseApiClient {
     final json = await _getEnvelope(
       '/reviews',
       query: {'product_id': productId},
-      useCache: true,
+      useCache: false,
     );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
@@ -360,7 +440,12 @@ class StoreFuseApiClient {
   Future<EnvelopeResult<JsonMap>> submitReview({
     required Map<String, dynamic> body,
   }) async {
-    final json = await _mutateEnvelope('/reviews', method: 'POST', data: body, wpNonce: true);
+    final json = await _mutateEnvelope(
+      '/reviews',
+      method: 'POST',
+      data: body,
+      wpNonce: true,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
@@ -370,26 +455,66 @@ class StoreFuseApiClient {
   }
 
   Future<void> bootstrapNonces() async {
-    final json = await _getEnvelope('/auth/nonce');
-    EnvelopeParser.parseSuccess(json, (d) {
-      nonces.updateFromJson(d);
-      return d;
-    });
+    final pending = _refreshSession;
+    if (pending != null) return pending;
+    final future = _bootstrapSession();
+    _refreshSession = future;
+    try {
+      await future;
+    } finally {
+      _refreshSession = null;
+    }
   }
 
+  Future<void> _bootstrapSession() async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '${env.bridgeBaseUrl.replaceAll(RegExp(r'/+$'), '')}/wp-admin/admin-ajax.php',
+        data: {'action': 'storefuse_session'},
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+      final body = response.data;
+      if (body?['success'] != true || body?['data'] is! Map) {
+        throw StoreFuseApiException(
+          message: 'Could not restore your store session.',
+        );
+      }
+      nonces.updateFromJson(Map<String, dynamic>.from(body!['data'] as Map));
+    } on DioException catch (e) {
+      throw _mapDioError(e);
+    }
+  }
+
+  Future<List<Cookie>> cookiesFor(Uri uri) async =>
+      await _cookieJar?.loadForRequest(uri) ?? [];
+
   Future<EnvelopeResult<JsonMap>> cartAdd(Map<String, dynamic> body) async {
-    final json = await _mutateEnvelope('/cart/add', method: 'POST', data: body, wcNonce: true);
+    final json = await _mutateEnvelope(
+      '/cart/add',
+      method: 'POST',
+      data: body,
+      wcNonce: true,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
   Future<EnvelopeResult<JsonMap>> cartUpdate(Map<String, dynamic> body) async {
-    final json = await _mutateEnvelope('/cart/update', method: 'PUT', data: body, wcNonce: true);
+    final json = await _mutateEnvelope(
+      '/cart/update',
+      method: 'PUT',
+      data: body,
+      wcNonce: true,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
   Future<EnvelopeResult<JsonMap>> cartRemove(Map<String, dynamic> body) async {
-    final json =
-        await _mutateEnvelope('/cart/remove', method: 'DELETE', data: body, wcNonce: true);
+    final json = await _mutateEnvelope(
+      '/cart/remove',
+      method: 'DELETE',
+      data: body,
+      wcNonce: true,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
@@ -419,18 +544,33 @@ class StoreFuseApiClient {
   }
 
   Future<EnvelopeResult<JsonMap>> authLogin(Map<String, dynamic> body) async {
-    final json = await _mutateEnvelope('/auth/login', method: 'POST', data: body, wpNonce: true);
+    final json = await _mutateEnvelope(
+      '/auth/login',
+      method: 'POST',
+      data: body,
+      wpNonce: true,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
-  Future<EnvelopeResult<JsonMap>> authRegister(Map<String, dynamic> body) async {
-    final json =
-        await _mutateEnvelope('/auth/register', method: 'POST', data: body, wpNonce: true);
+  Future<EnvelopeResult<JsonMap>> authRegister(
+    Map<String, dynamic> body,
+  ) async {
+    final json = await _mutateEnvelope(
+      '/auth/register',
+      method: 'POST',
+      data: body,
+      wpNonce: true,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
   Future<EnvelopeResult<JsonMap>> authLogout() async {
-    final json = await _mutateEnvelope('/auth/logout', method: 'POST', wpNonce: true);
+    final json = await _mutateEnvelope(
+      '/auth/logout',
+      method: 'POST',
+      wpNonce: true,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
@@ -444,9 +584,31 @@ class StoreFuseApiClient {
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
-  Future<EnvelopeResult<JsonMap>> authResetPassword(Map<String, dynamic> body) async {
-    final json =
-        await _mutateEnvelope('/auth/reset-password', method: 'POST', data: body, wpNonce: true);
+  Future<EnvelopeResult<JsonMap>> authResetPassword(
+    Map<String, dynamic> body,
+  ) async {
+    final json = await _mutateEnvelope(
+      '/auth/reset-password',
+      method: 'POST',
+      data: body,
+      wpNonce: true,
+    );
+    return EnvelopeParser.parseSuccess(json, (d) => d);
+  }
+
+  Future<EnvelopeResult<JsonMap>> accountDeletionStatus() async {
+    final json = await _getEnvelope('/account/deletion-request');
+    return EnvelopeParser.parseSuccess(json, (d) => d);
+  }
+
+  Future<String?> lastOrderKey() => _sessionStorage.read('last_order_key');
+
+  Future<EnvelopeResult<JsonMap>> requestAccountDeletion() async {
+    final json = await _mutateEnvelope(
+      '/account/deletion-request',
+      method: 'POST',
+      wpNonce: true,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
@@ -455,12 +617,21 @@ class StoreFuseApiClient {
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
-  Future<EnvelopeResult<JsonMap>> updateAccount(Map<String, dynamic> body) async {
-    final json = await _mutateEnvelope('/account', method: 'PUT', data: body, wpNonce: true);
+  Future<EnvelopeResult<JsonMap>> updateAccount(
+    Map<String, dynamic> body,
+  ) async {
+    final json = await _mutateEnvelope(
+      '/account',
+      method: 'PUT',
+      data: body,
+      wpNonce: true,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
-  Future<EnvelopeResult<JsonMap>> changePassword(Map<String, dynamic> body) async {
+  Future<EnvelopeResult<JsonMap>> changePassword(
+    Map<String, dynamic> body,
+  ) async {
     final json = await _mutateEnvelope(
       '/account/change-password',
       method: 'POST',
@@ -475,15 +646,27 @@ class StoreFuseApiClient {
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
-  Future<EnvelopeResult<JsonMap>> updateBilling(Map<String, dynamic> body) async {
-    final json =
-        await _mutateEnvelope('/addresses/billing', method: 'PUT', data: body, wpNonce: true);
+  Future<EnvelopeResult<JsonMap>> updateBilling(
+    Map<String, dynamic> body,
+  ) async {
+    final json = await _mutateEnvelope(
+      '/addresses/billing',
+      method: 'PUT',
+      data: body,
+      wpNonce: true,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
-  Future<EnvelopeResult<JsonMap>> updateShipping(Map<String, dynamic> body) async {
-    final json =
-        await _mutateEnvelope('/addresses/shipping', method: 'PUT', data: body, wpNonce: true);
+  Future<EnvelopeResult<JsonMap>> updateShipping(
+    Map<String, dynamic> body,
+  ) async {
+    final json = await _mutateEnvelope(
+      '/addresses/shipping',
+      method: 'PUT',
+      data: body,
+      wpNonce: true,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
@@ -535,14 +718,40 @@ class StoreFuseApiClient {
     });
   }
 
-  Future<EnvelopeResult<JsonMap>> getShippingMethods({Map<String, dynamic>? address}) async {
-    final json = await _getEnvelope('/checkout/shipping-methods', query: address);
+  Future<EnvelopeResult<JsonMap>> getShippingMethods({
+    Map<String, dynamic>? address,
+  }) async {
+    final json = await _getEnvelope(
+      '/checkout/shipping-methods',
+      query: address,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
   Future<EnvelopeResult<JsonMap>> checkoutRedirectUrl() async {
-    final json =
-        await _mutateEnvelope('/checkout/redirect-url', method: 'POST', wcNonce: true);
+    final json = await _mutateEnvelope(
+      '/checkout/redirect-url',
+      method: 'POST',
+      wcNonce: true,
+    );
+    return EnvelopeParser.parseSuccess(json, (d) => d);
+  }
+
+  SecureCookieStorage get _sessionStorage =>
+      SecureCookieStorage('${env.flavor}|${env.bridgeBaseUrl}');
+
+  Future<JsonMap?> pendingCheckout() async {
+    final raw = await _sessionStorage.read('checkout_attempt');
+    return raw == null ? null : asJsonMap(jsonDecode(raw));
+  }
+
+  Future<EnvelopeResult<JsonMap>> checkoutQuote(JsonMap body) async {
+    final json = await _mutateEnvelope(
+      '/checkout/quote',
+      method: 'POST',
+      data: body,
+      wcNonce: true,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
@@ -550,15 +759,70 @@ class StoreFuseApiClient {
     Map<String, dynamic> body, {
     String? idempotencyKey,
   }) async {
-    final key = idempotencyKey ?? generateIdempotencyKey();
-    final json = await _mutateEnvelope(
-      '/checkout',
-      method: 'POST',
-      data: body,
-      wcNonce: true,
-      extraHeaders: {'Idempotency-Key': key},
+    final previous = await pendingCheckout();
+    if (previous != null && jsonEncode(previous['body']) != jsonEncode(body)) {
+      throw StoreFuseApiException(
+        message:
+            'An earlier checkout is unresolved. Restore its details and retry, or check your orders before starting another purchase.',
+      );
+    }
+    final key =
+        previous?['key']?.toString() ??
+        idempotencyKey ??
+        generateIdempotencyKey();
+    await _sessionStorage.write(
+      'checkout_attempt',
+      jsonEncode({'key': key, 'body': body}),
     );
-    return EnvelopeParser.parseSuccess(json, (d) => d);
+    late final JsonMap json;
+    try {
+      json = await _mutateEnvelope(
+        '/checkout',
+        method: 'POST',
+        data: body,
+        wcNonce: true,
+        extraHeaders: {'Idempotency-Key': key},
+      );
+    } on StoreFuseApiException catch (e) {
+      // These failures happen before the server records/creates an order.
+      if ({
+        'validation_error',
+        'invalid_email',
+        'out_of_stock',
+      }.contains(e.code)) {
+        await _sessionStorage.delete('checkout_attempt');
+      }
+      rethrow;
+    }
+    final result = EnvelopeParser.parseSuccess(json, (d) => d);
+    final orderKey = result.data['order_key']?.toString();
+    if (orderKey != null && orderKey.isNotEmpty) {
+      await _sessionStorage.write('last_order_key', orderKey);
+    }
+    final orderId = result.data['order_id'];
+    if (orderId != null) {
+      await _sessionStorage.write('last_order_id', orderId.toString());
+    }
+    await _sessionStorage.delete('checkout_attempt');
+    return result;
+  }
+
+  Future<String?> resolveCheckoutOrderKey(JsonMap checkoutData) async {
+    final direct = checkoutData['order_key']?.toString();
+    if (direct != null && direct.isNotEmpty) return direct;
+    final orderId = parseInt(checkoutData['order_id']);
+    if (orderId > 0) {
+      try {
+        final order = (await getOrderById(orderId)).data;
+        final key = order['order_key']?.toString();
+        if (key != null && key.isNotEmpty) return key;
+      } catch (_) {
+        // Fall through to durable local hints.
+      }
+    }
+    final storedKey = await _sessionStorage.read('last_order_key');
+    if (storedKey != null && storedKey.isNotEmpty) return storedKey;
+    return null;
   }
 
   Future<EnvelopeResult<JsonMap>> getOrderByKey(String key) async {
@@ -566,8 +830,14 @@ class StoreFuseApiClient {
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
-  Future<EnvelopeResult<JsonMap>> getOrders({int page = 1, int perPage = 10}) async {
-    final json = await _getEnvelope('/orders', query: {'page': page, 'per_page': perPage});
+  Future<EnvelopeResult<JsonMap>> getOrders({
+    int page = 1,
+    int perPage = 10,
+  }) async {
+    final json = await _getEnvelope(
+      '/orders',
+      query: {'page': page, 'per_page': perPage},
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
@@ -577,20 +847,31 @@ class StoreFuseApiClient {
   }
 
   Future<EnvelopeResult<JsonMap>> cancelOrder(int id) async {
-    final json = await _mutateEnvelope('/orders/$id/cancel', method: 'POST', wpNonce: true);
+    final json = await _mutateEnvelope(
+      '/orders/$id/cancel',
+      method: 'POST',
+      wpNonce: true,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
   Future<EnvelopeResult<JsonMap>> reorder(int id) async {
-    final json = await _mutateEnvelope('/orders/$id/reorder', method: 'POST', wcNonce: true);
+    final json = await _mutateEnvelope(
+      '/orders/$id/reorder',
+      method: 'POST',
+      wcNonce: true,
+    );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
-  Future<EnvelopeResult<JsonMap>> returnRequest(int id, {String? reason}) async {
+  Future<EnvelopeResult<JsonMap>> returnRequest(
+    int id, {
+    String? reason,
+  }) async {
     final json = await _mutateEnvelope(
       '/orders/$id/return-request',
       method: 'POST',
-      data: {if (reason != null) 'reason': reason},
+      data: {'reason': ?reason},
       wpNonce: true,
     );
     return EnvelopeParser.parseSuccess(json, (d) => d);
@@ -607,7 +888,7 @@ class StoreFuseApiClient {
   }
 
   Future<EnvelopeResult<JsonMap>> getCountries() async {
-    final json = await _getEnvelope('/utils/countries', useCache: true);
+    final json = await _getEnvelope('/utils/countries', useCache: false);
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }
 
@@ -637,11 +918,7 @@ class StoreFuseApiClient {
     final json = await _mutateEnvelope(
       '/products/$slug/notify',
       method: 'POST',
-      data: {
-        'email': email,
-        'consent': consent,
-        'website': '',
-      },
+      data: {'email': email, 'consent': consent, 'website': ''},
     );
     return EnvelopeParser.parseSuccess(json, (d) => d);
   }

@@ -63,9 +63,9 @@ class Order {
       number: json['number']?.toString(),
       status: json['status']?.toString(),
       dateCreated: json['date_created']?.toString(),
-      items: asJsonList(json['items'] ?? json['line_items'])
-          .map(OrderLineItem.fromJson)
-          .toList(),
+      items: asJsonList(
+        json['items'] ?? json['line_items'],
+      ).map(OrderLineItem.fromJson).toList(),
       totals: totals,
       billing: asJsonMap(json['billing']),
       shipping: asJsonMap(json['shipping']),

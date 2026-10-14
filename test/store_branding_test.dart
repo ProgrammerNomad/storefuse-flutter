@@ -5,7 +5,7 @@ import 'package:storefuse_app/features/bootstrap/bootstrap_provider.dart';
 import 'package:storefuse_app/features/bootstrap/store_branding.dart';
 
 void main() {
-  test('storeThemeSeedProvider reads header color from settings', () async {
+  test('storeThemeSeedProvider reads app colour independently of announcement colour', () async {
     final container = ProviderContainer(
       overrides: [
         bootstrapProvider.overrideWith(
@@ -17,7 +17,7 @@ void main() {
 
     await container.read(bootstrapProvider.future);
     final seed = container.read(storeThemeSeedProvider);
-    expect(seed, const Color(0xFFE85D04));
+    expect(seed, const Color(0xFF334455));
     expect(container.read(storeNameProvider), 'Demo Shop');
     expect(container.read(storeThemeProvider).useMaterial3, isTrue);
   });
@@ -31,6 +31,7 @@ class _FakeBootstrapNotifier extends BootstrapNotifier {
       settingsData: {
         'site': {'name': 'Demo Shop', 'logo_url': 'https://example.com/logo.png'},
         'header': {'announcement_bar_bg_color': '#E85D04'},
+        'app': {'primary_color': '#334455'},
       },
       modules: const {'products': true},
     );

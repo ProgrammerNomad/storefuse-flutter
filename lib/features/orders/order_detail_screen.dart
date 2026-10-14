@@ -11,6 +11,7 @@ import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/error_view.dart';
 import '../../core/widgets/order_status_badge.dart';
 import '../cart/cart_provider.dart';
+import '../bootstrap/bootstrap_provider.dart';
 import 'orders_repository.dart';
 
 class OrderDetailScreen extends ConsumerStatefulWidget {
@@ -54,10 +55,21 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
             );
           }
           final order = Order.fromJson(snapshot.data!);
+          final features =
+              asJsonMap(
+                ref
+                    .watch(bootstrapProvider)
+                    .valueOrNull
+                    ?.statusData?['features'],
+              ) ??
+              {};
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text('Order #${order.number}', style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                'Order #${order.number}',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               OrderStatusBadge(status: order.status ?? ''),
               if (order.dateCreated != null) Text(order.dateCreated!),
               if (order.totalFormatted != null)
@@ -81,7 +93,10 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
               ],
               if (order.shipping != null) ...[
                 const SizedBox(height: 16),
-                Text('Shipping', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Shipping',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 Text(_formatAddress(order.shipping!)),
               ],
               const SizedBox(height: 16),
@@ -95,13 +110,17 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                         final ok = await showConfirmDialog(
                           context,
                           title: 'Cancel order?',
-                          message: 'This will request cancellation for this order.',
+                          message:
+                              'This will request cancellation for this order.',
                         );
                         if (!ok || !context.mounted) return;
                         try {
-                          await ref.read(ordersRepositoryProvider).cancel(widget.orderId);
+                          await ref
+                              .read(ordersRepositoryProvider)
+                              .cancel(widget.orderId);
                           await _reload();
                         } on StoreFuseApiException catch (e) {
+                          if (!context.mounted) return;
                           SnackBarHelper.showException(context, e);
                         }
                       },
@@ -110,59 +129,85 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                   OutlinedButton(
                     onPressed: () async {
                       try {
-                        await ref.read(ordersRepositoryProvider).reorder(widget.orderId);
+                        await ref
+                            .read(ordersRepositoryProvider)
+                            .reorder(widget.orderId);
                         await ref.read(cartProvider.notifier).refresh();
-                        SnackBarHelper.showMessage(context, 'Items added to cart');
+                        if (!context.mounted) return;
+                        SnackBarHelper.showMessage(
+                          context,
+                          'Items added to cart',
+                        );
                       } on StoreFuseApiException catch (e) {
+                        if (!context.mounted) return;
                         SnackBarHelper.showException(context, e);
                       }
                     },
                     child: const Text('Reorder'),
                   ),
-                  OutlinedButton(
-                    onPressed: () async {
-                      final reason = await _promptReturnReason(context);
-                      if (reason == null || !context.mounted) return;
-                      try {
-                        await ref.read(ordersRepositoryProvider).returnRequest(
-                              widget.orderId,
-                              reason: reason,
-                            );
-                        SnackBarHelper.showMessage(context, 'Return requested');
-                      } on StoreFuseApiException catch (e) {
-                        SnackBarHelper.showException(context, e);
-                      }
-                    },
-                    child: const Text('Return'),
-                  ),
-                  OutlinedButton(
-                    onPressed: () async {
-                      try {
-                        final invoice =
-                            await ref.read(ordersRepositoryProvider).invoice(widget.orderId);
-                        final url = invoice['url']?.toString() ??
-                            invoice['invoice_url']?.toString() ??
-                            invoice['print_url']?.toString();
-                        if (url == null || url.isEmpty) {
-                          if (context.mounted) {
-                            SnackBarHelper.showMessage(context, 'Invoice not available.');
+                  if (features['returns'] == true &&
+                      order.status == 'completed')
+                    OutlinedButton(
+                      onPressed: () async {
+                        final reason = await _promptReturnReason(context);
+                        if (reason == null || !context.mounted) return;
+                        try {
+                          await ref
+                              .read(ordersRepositoryProvider)
+                              .returnRequest(widget.orderId, reason: reason);
+                          if (!context.mounted) return;
+                          SnackBarHelper.showMessage(
+                            context,
+                            'Return requested',
+                          );
+                        } on StoreFuseApiException catch (e) {
+                          if (!context.mounted) return;
+                          SnackBarHelper.showException(context, e);
+                        }
+                      },
+                      child: const Text('Return'),
+                    ),
+                  if (features['invoice_download'] == true)
+                    OutlinedButton(
+                      onPressed: () async {
+                        try {
+                          final invoice = await ref
+                              .read(ordersRepositoryProvider)
+                              .invoice(widget.orderId);
+                          final url =
+                              invoice['url']?.toString() ??
+                              invoice['invoice_url']?.toString() ??
+                              invoice['print_url']?.toString();
+                          if (url == null || url.isEmpty) {
+                            if (context.mounted) {
+                              if (!context.mounted) return;
+                              SnackBarHelper.showMessage(
+                                context,
+                                'Invoice not available.',
+                              );
+                            }
+                            return;
                           }
-                          return;
+                          final uri = Uri.parse(url);
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
+                          }
+                        } on StoreFuseApiException catch (e) {
+                          if (!context.mounted) return;
+                          SnackBarHelper.showException(context, e);
                         }
-                        final uri = Uri.parse(url);
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                        }
-                      } on StoreFuseApiException catch (e) {
-                        SnackBarHelper.showException(context, e);
-                      }
-                    },
-                    child: const Text('Invoice'),
-                  ),
+                      },
+                      child: const Text('Invoice'),
+                    ),
                   OutlinedButton(
                     onPressed: () async {
                       try {
-                        final t = await ref.read(ordersRepositoryProvider).tracking(widget.orderId);
+                        final t = await ref
+                            .read(ordersRepositoryProvider)
+                            .tracking(widget.orderId);
                         if (!context.mounted) return;
                         await showDialog<void>(
                           context: context,
@@ -172,6 +217,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                           ),
                         );
                       } on StoreFuseApiException catch (e) {
+                        if (!context.mounted) return;
                         SnackBarHelper.showException(context, e);
                       }
                     },
@@ -206,7 +252,12 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     final url = t['tracking_url']?.toString() ?? t['url']?.toString();
     final provider = t['carrier']?.toString() ?? t['provider']?.toString();
     final number = t['tracking_number']?.toString() ?? t['number']?.toString();
-    return [provider, number, url].whereType<String>().where((s) => s.isNotEmpty).join('\n');
+    final text = [
+      provider,
+      number,
+      url,
+    ].whereType<String>().where((s) => s.isNotEmpty).join('\n');
+    return text.isEmpty ? 'Tracking information is not available yet.' : text;
   }
 
   Future<String?> _promptReturnReason(BuildContext context) async {
@@ -221,7 +272,10 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
           maxLines: 3,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
             child: const Text('Submit'),

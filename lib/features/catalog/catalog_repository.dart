@@ -90,7 +90,9 @@ class CatalogRepository {
     return (await reviewsData(productId)).reviews;
   }
 
-  Future<({List<JsonMap> reviews, JsonMap? ratingStats})> reviewsData(int productId) async {
+  Future<({List<JsonMap> reviews, JsonMap? ratingStats})> reviewsData(
+    int productId,
+  ) async {
     final client = await _client();
     final data = (await client.getReviews(productId: productId)).data;
     return (
@@ -109,7 +111,10 @@ class CatalogRepository {
     return PaginatedResult.jsonMaps(data);
   }
 
-  Future<JsonMap> notifyBackInStock({required String slug, required String email}) async {
+  Future<JsonMap> notifyBackInStock({
+    required String slug,
+    required String email,
+  }) async {
     final client = await _client();
     return (await client.productNotifySignup(slug: slug, email: email)).data;
   }

@@ -1,8 +1,9 @@
+import 'l10n/app_localizations.dart';
+import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'features/bootstrap/bootstrap_provider.dart';
 import 'features/bootstrap/bootstrap_provider.dart';
 import 'features/bootstrap/store_branding.dart';
 import 'features/settings/settings_provider.dart';
@@ -18,10 +19,20 @@ class StoreFuseApp extends ConsumerStatefulWidget {
 class _StoreFuseAppState extends ConsumerState<StoreFuseApp> {
   bool _offline = false;
 
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+
+  @override
+  void dispose() {
+    _connectivitySubscription?.cancel();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
-    Connectivity().onConnectivityChanged.listen((results) {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      results,
+    ) {
       final offline = results.every((r) => r == ConnectivityResult.none);
       if (mounted) setState(() => _offline = offline);
     });
@@ -47,6 +58,8 @@ class _StoreFuseAppState extends ConsumerState<StoreFuseApp> {
 
     return MaterialApp.router(
       title: storeName,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: theme,
       darkTheme: darkTheme,
       themeMode: appSettings.themeMode,
@@ -56,7 +69,7 @@ class _StoreFuseAppState extends ConsumerState<StoreFuseApp> {
           children: [
             if (_offline)
               MaterialBanner(
-                content: const Text('You are offline. Some actions may fail.'),
+                content: Text(AppLocalizations.of(context)!.offlineMessage),
                 leading: const Icon(Icons.cloud_off),
                 actions: const [SizedBox.shrink()],
               ),
