@@ -254,6 +254,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         if (uri.host == 'categories' && uri.pathSegments.isNotEmpty) {
           return '/categories/${uri.pathSegments.first}';
         }
+        if (uri.host == 'order' && uri.pathSegments.isNotEmpty) {
+          return '/orders/${uri.pathSegments.first}';
+        }
+        if (uri.host == 'orders' && uri.pathSegments.isNotEmpty) {
+          return '/orders/${uri.pathSegments.first}';
+        }
+        if (uri.host == 'cart') {
+          return '/cart';
+        }
       }
       return null;
     },

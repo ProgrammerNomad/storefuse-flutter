@@ -51,8 +51,10 @@ class _StoreFuseAppState extends ConsumerState<StoreFuseApp> {
     final darkTheme = ThemeData(
       colorScheme: ColorScheme.fromSeed(
         seedColor: theme.colorScheme.primary,
+        secondary: theme.colorScheme.secondary,
         brightness: Brightness.dark,
       ),
+      fontFamily: theme.textTheme.bodyMedium?.fontFamily,
       useMaterial3: true,
     );
 

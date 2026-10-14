@@ -11,8 +11,10 @@ import 'dart:convert';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/widgets/price_text.dart';
 import '../../core/widgets/error_view.dart';
+import '../../core/widgets/guest_login_prompt.dart';
 import '../../core/widgets/loading_button.dart';
 
+import '../bootstrap/app_ui_config.dart';
 import '../bootstrap/bootstrap_provider.dart';
 import '../cart/cart_provider.dart';
 import 'checkout_webview_screen.dart';
@@ -443,6 +445,7 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
   @override
   Widget build(BuildContext context) {
     final totals = asJsonMap(_quote?['totals']) ?? {};
+    final checkoutUi = ref.watch(appUiConfigProvider).checkoutScreen;
     return AbsorbPointer(
       absorbing: _busy,
       child: Form(
@@ -451,6 +454,10 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
           padding: const EdgeInsets.all(16),
           children: [
             if (_busy) const LinearProgressIndicator(),
+            if (checkoutUi.showGuestPrompt)
+              const GuestLoginPromptBanner(
+                message: 'Sign in to use your saved addresses and speed up checkout.',
+              ),
             if (_pendingBody != null)
               Card(
                 child: Padding(

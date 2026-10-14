@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/env.dart';
 import '../../core/models/json_helpers.dart';
 import '../../core/theme/store_colors.dart';
+import 'app_ui_config.dart';
 import 'bootstrap_provider.dart';
 
 final appEnvFlavorProvider = Provider<AppEnv>(
@@ -34,8 +35,19 @@ final storeThemeSeedProvider = Provider<Color>((ref) {
 
 final storeThemeProvider = Provider<ThemeData>((ref) {
   final seed = ref.watch(storeThemeSeedProvider);
+  final themeUi = ref.watch(appUiConfigProvider).theme;
+  final secondary = themeUi.secondaryColor != null
+      ? parseStoreSeedColor(themeUi.secondaryColor)
+      : null;
+
   return ThemeData(
-    colorScheme: ColorScheme.fromSeed(seedColor: seed),
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: seed,
+      secondary: secondary,
+    ),
+    fontFamily: themeUi.fontFamily != 'Default' && themeUi.fontFamily.isNotEmpty
+        ? themeUi.fontFamily
+        : null,
     useMaterial3: true,
   );
 });

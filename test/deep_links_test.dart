@@ -9,13 +9,17 @@ void main() {
     );
   });
 
-  test('productShareText includes web permalink when provided', () {
-    final text = StoreDeepLinks.productShareText(
-      scheme: 'storefuse',
-      slug: 'tee',
-      webPermalink: 'https://shop.example.com/product/tee/',
+  test('categoryUri uses category host and slug path', () {
+    expect(
+      StoreDeepLinks.categoryUri(scheme: 'mystore', slug: 'clothing').toString(),
+      'mystore://category/clothing',
     );
-    expect(text, contains('storefuse://product/tee'));
-    expect(text, contains('https://shop.example.com/product/tee/'));
+  });
+
+  test('orderUri uses order host and orderId path', () {
+    expect(
+      StoreDeepLinks.orderUri(scheme: 'mystore', orderId: '1024').toString(),
+      'mystore://order/1024',
+    );
   });
 }

@@ -10,6 +10,7 @@ import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/error_view.dart';
 import '../../core/widgets/order_status_badge.dart';
+import '../../core/widgets/order_tracking_timeline.dart';
 import '../cart/cart_provider.dart';
 import '../bootstrap/bootstrap_provider.dart';
 import 'orders_repository.dart';
@@ -66,16 +67,37 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text(
-                'Order #${order.number}',
-                style: Theme.of(context).textTheme.titleLarge,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Order #${order.number}',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  OrderStatusBadge(status: order.status ?? ''),
+                ],
               ),
-              OrderStatusBadge(status: order.status ?? ''),
-              if (order.dateCreated != null) Text(order.dateCreated!),
+              if (order.dateCreated != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    order.dateCreated!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              OrderTrackingTimeline(
+                status: order.status ?? '',
+                dateCreated: order.dateCreated,
+              ),
               if (order.totalFormatted != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: Text('Total: ${order.totalFormatted}'),
+                  child: Text(
+                    'Total: ${order.totalFormatted}',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
                 ),
               const SizedBox(height: 16),
               Text('Items', style: Theme.of(context).textTheme.titleMedium),
@@ -209,11 +231,61 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                             .read(ordersRepositoryProvider)
                             .tracking(widget.orderId);
                         if (!context.mounted) return;
+                        final url =
+                            t['tracking_url']?.toString() ??
+                            t['url']?.toString();
+                        final carrier =
+                            t['carrier']?.toString() ??
+                            t['provider']?.toString();
+                        final number =
+                            t['tracking_number']?.toString() ??
+                            t['number']?.toString();
+                        final hasData = (carrier != null && carrier.isNotEmpty) ||
+                            (number != null && number.isNotEmpty) ||
+                            (url != null && url.isNotEmpty);
+
                         await showDialog<void>(
                           context: context,
                           builder: (_) => AlertDialog(
-                            title: const Text('Tracking'),
-                            content: Text(_trackingText(t)),
+                            title: const Text('Order Tracking'),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (carrier != null && carrier.isNotEmpty) ...[
+                                  Text(
+                                    'Carrier: $carrier',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 8),
+                                ],
+                                if (number != null && number.isNotEmpty) ...[
+                                  Text('Tracking Number: $number'),
+                                  const SizedBox(height: 8),
+                                ],
+                                if (!hasData)
+                                  const Text('Tracking information is not available yet.'),
+                              ],
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Close'),
+                              ),
+                              if (url != null && url.isNotEmpty)
+                                FilledButton(
+                                  onPressed: () async {
+                                    final uri = Uri.parse(url);
+                                    if (await canLaunchUrl(uri)) {
+                                      await launchUrl(
+                                        uri,
+                                        mode: LaunchMode.externalApplication,
+                                      );
+                                    }
+                                  },
+                                  child: const Text('Track Package'),
+                                ),
+                            ],
                           ),
                         );
                       } on StoreFuseApiException catch (e) {
@@ -248,17 +320,6 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     ].whereType<String>().where((s) => s.isNotEmpty).join(', ');
   }
 
-  String _trackingText(JsonMap t) {
-    final url = t['tracking_url']?.toString() ?? t['url']?.toString();
-    final provider = t['carrier']?.toString() ?? t['provider']?.toString();
-    final number = t['tracking_number']?.toString() ?? t['number']?.toString();
-    final text = [
-      provider,
-      number,
-      url,
-    ].whereType<String>().where((s) => s.isNotEmpty).join('\n');
-    return text.isEmpty ? 'Tracking information is not available yet.' : text;
-  }
 
   Future<String?> _promptReturnReason(BuildContext context) async {
     final controller = TextEditingController();

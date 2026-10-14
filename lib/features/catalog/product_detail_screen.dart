@@ -108,22 +108,23 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     return AppScaffold(
       title: 'Product',
       actions: [
-        IconButton(
-          icon: const Icon(Icons.share_outlined),
-          tooltip: 'Share product',
-          onPressed: () async {
-            final data = await _productFuture;
-            final slug = data['slug']?.toString();
-            if (slug == null || slug.isEmpty || !mounted) return;
-            final env = ref.read(appEnvProvider);
-            final text = StoreDeepLinks.productShareText(
-              scheme: env.deepLinkScheme,
-              slug: slug,
-              webPermalink: data['permalink']?.toString(),
-            );
-            await SharePlus.instance.share(ShareParams(text: text));
-          },
-        ),
+        if (pdpUi.showShare)
+          IconButton(
+            icon: const Icon(Icons.share_outlined),
+            tooltip: 'Share product',
+            onPressed: () async {
+              final data = await _productFuture;
+              final slug = data['slug']?.toString();
+              if (slug == null || slug.isEmpty || !mounted) return;
+              final env = ref.read(appEnvProvider);
+              final text = StoreDeepLinks.productShareText(
+                scheme: env.deepLinkScheme,
+                slug: slug,
+                webPermalink: data['permalink']?.toString(),
+              );
+              await SharePlus.instance.share(ShareParams(text: text));
+            },
+          ),
       ],
       body: FutureBuilder<JsonMap>(
         future: _productFuture,
@@ -344,7 +345,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     icon: const Icon(Icons.add_circle_outline),
                   ),
                   const Spacer(),
-                  if (modules['wishlist'] == true)
+                  if (modules['wishlist'] == true && pdpUi.showWishlist)
                     IconButton(
                       icon: Icon(
                         ref
@@ -417,7 +418,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   ),
                 ),
               ],
-              if (reviewsEnabled) ...[
+              if (reviewsEnabled && pdpUi.showReviews) ...[
                 const SizedBox(height: 32),
                 Text('Reviews', style: Theme.of(context).textTheme.titleMedium),
                 FutureBuilder<({List<JsonMap> reviews, JsonMap? ratingStats})>(

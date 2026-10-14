@@ -17,6 +17,8 @@ class AddressesScreen extends ConsumerStatefulWidget {
 }
 
 class _AddressesScreenState extends ConsumerState<AddressesScreen> {
+  final _billingFormKey = GlobalKey<FormState>();
+  final _shippingFormKey = GlobalKey<FormState>();
   late Future<JsonMap> _future;
   bool _saving = false;
 
@@ -141,6 +143,7 @@ class _AddressesScreenState extends ConsumerState<AddressesScreen> {
   };
 
   Future<void> _saveBilling() async {
+    if (!_billingFormKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
       await ref.read(authRepositoryProvider).updateBilling(_billingBody());
@@ -161,6 +164,7 @@ class _AddressesScreenState extends ConsumerState<AddressesScreen> {
   }
 
   Future<void> _saveShipping() async {
+    if (!_shippingFormKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
       await ref.read(authRepositoryProvider).updateShipping(_shippingBody());
@@ -193,56 +197,81 @@ class _AddressesScreenState extends ConsumerState<AddressesScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text('Billing', style: Theme.of(context).textTheme.titleMedium),
-              TextField(
-                controller: _billFirst,
-                decoration: const InputDecoration(labelText: 'First name'),
+              Form(
+                key: _billingFormKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Billing', style: Theme.of(context).textTheme.titleMedium),
+                    TextFormField(
+                      controller: _billFirst,
+                      decoration: const InputDecoration(labelText: 'First name *'),
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'First name is required' : null,
+                    ),
+                    TextFormField(
+                      controller: _billLast,
+                      decoration: const InputDecoration(labelText: 'Last name *'),
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Last name is required' : null,
+                    ),
+                    TextFormField(
+                      controller: _billAddress1,
+                      decoration: const InputDecoration(labelText: 'Address *'),
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Address is required' : null,
+                    ),
+                    AddressFields(
+                      countryController: _billCountry,
+                      postcodeController: _billPostcode,
+                      cityController: _billCity,
+                      stateController: _billState,
+                    ),
+                    TextFormField(
+                      controller: _billPhone,
+                      decoration: const InputDecoration(labelText: 'Phone'),
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: _saving ? null : _saveBilling,
+                      child: const Text('Save billing'),
+                    ),
+                  ],
+                ),
               ),
-              TextField(
-                controller: _billLast,
-                decoration: const InputDecoration(labelText: 'Last name'),
-              ),
-              TextField(
-                controller: _billAddress1,
-                decoration: const InputDecoration(labelText: 'Address'),
-              ),
-              AddressFields(
-                countryController: _billCountry,
-                postcodeController: _billPostcode,
-                cityController: _billCity,
-                stateController: _billState,
-              ),
-              TextField(
-                controller: _billPhone,
-                decoration: const InputDecoration(labelText: 'Phone'),
-              ),
-              FilledButton(
-                onPressed: _saving ? null : _saveBilling,
-                child: const Text('Save billing'),
-              ),
-              const SizedBox(height: 24),
-              Text('Shipping', style: Theme.of(context).textTheme.titleMedium),
-              TextField(
-                controller: _shipFirst,
-                decoration: const InputDecoration(labelText: 'First name'),
-              ),
-              TextField(
-                controller: _shipLast,
-                decoration: const InputDecoration(labelText: 'Last name'),
-              ),
-              TextField(
-                controller: _shipAddress1,
-                decoration: const InputDecoration(labelText: 'Address'),
-              ),
-              AddressFields(
-                countryController: _shipCountry,
-                postcodeController: _shipPostcode,
-                cityController: _shipCity,
-                stateController: _shipState,
-              ),
-              FilledButton(
-                onPressed: _saving ? null : _saveShipping,
-                child: const Text('Save shipping'),
+              const SizedBox(height: 32),
+              Form(
+                key: _shippingFormKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Shipping', style: Theme.of(context).textTheme.titleMedium),
+                    TextFormField(
+                      controller: _shipFirst,
+                      decoration: const InputDecoration(labelText: 'First name *'),
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'First name is required' : null,
+                    ),
+                    TextFormField(
+                      controller: _shipLast,
+                      decoration: const InputDecoration(labelText: 'Last name *'),
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Last name is required' : null,
+                    ),
+                    TextFormField(
+                      controller: _shipAddress1,
+                      decoration: const InputDecoration(labelText: 'Address *'),
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Address is required' : null,
+                    ),
+                    AddressFields(
+                      countryController: _shipCountry,
+                      postcodeController: _shipPostcode,
+                      cityController: _shipCity,
+                      stateController: _shipState,
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: _saving ? null : _saveShipping,
+                      child: const Text('Save shipping'),
+                    ),
+                  ],
+                ),
               ),
             ],
           );

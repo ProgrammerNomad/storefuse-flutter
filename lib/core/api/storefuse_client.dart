@@ -231,7 +231,13 @@ class StoreFuseApiClient {
         extraHeaders: extraHeaders,
       );
     } on StoreFuseApiException catch (e) {
-      if (wpNonce && recoverWpNonce && e.code == 'missing_wp_nonce') {
+      final isNonceError = {
+        'missing_wp_nonce',
+        'invalid_nonce',
+        'rest_cookie_invalid_nonce',
+        'missing_wc_nonce',
+      }.contains(e.code);
+      if (recoverWpNonce && isNonceError) {
         await bootstrapNonces();
         return _mutateEnvelopeOnce(
           path,

@@ -6,6 +6,14 @@ class StoreDeepLinks {
     return Uri(scheme: scheme, host: 'product', pathSegments: [slug]);
   }
 
+  static Uri categoryUri({required String scheme, required String slug}) {
+    return Uri(scheme: scheme, host: 'category', pathSegments: [slug]);
+  }
+
+  static Uri orderUri({required String scheme, required String orderId}) {
+    return Uri(scheme: scheme, host: 'order', pathSegments: [orderId]);
+  }
+
   /// Share text: app deep link plus optional web permalink for users without the app.
   static String productShareText({
     required String scheme,

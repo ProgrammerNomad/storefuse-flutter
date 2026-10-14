@@ -9,6 +9,7 @@ import '../../core/routing/store_href.dart';
 import '../../core/ui/show_store_error.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/empty_state_view.dart';
+import '../../core/widgets/guest_login_prompt.dart';
 import '../../core/widgets/cached_thumbnail.dart';
 import '../../core/widgets/price_text.dart';
 import '../bootstrap/app_ui_config.dart';
@@ -111,6 +112,14 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       ),
                     ],
                   ),
+                if (items.isNotEmpty && cartUi.showGuestPrompt)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: GuestLoginPromptBanner(
+                      message: 'Sign in to use your saved addresses and speed up checkout.',
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: _refresh,
@@ -141,6 +150,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                 fallback: 1,
                               );
                               final thumb = productThumbnailUrl(product);
+                              final variationMap = asJsonMap(line['variation']);
+                              final variationText = variationMap != null && variationMap.isNotEmpty
+                                  ? variationMap.entries.map((e) => '${e.key}: ${e.value}').join(' · ')
+                                  : null;
                               return Dismissible(
                                 key: ValueKey(key),
                                 direction: DismissDirection.endToStart,
@@ -164,10 +177,26 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                   title: Text(
                                     product['name']?.toString() ?? 'Item',
                                   ),
-                                  subtitle: PriceText(
-                                    price: asJsonMap(
-                                      line['price'] ?? product['price'],
-                                    ),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (variationText != null && variationText.isNotEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.only(bottom: 2),
+                                          child: Text(
+                                            variationText,
+                                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                            ),
+                                          ),
+                                        ),
+                                      PriceText(
+                                        price: asJsonMap(
+                                          line['price'] ?? product['price'],
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -278,26 +307,91 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     ),
                   if (totals != null) ...[
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Subtotal'),
-                          PriceText(price: asJsonMap(totals['subtotal'])),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 4,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Total'),
-                          PriceText(price: asJsonMap(totals['total'])),
-                        ],
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(50),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outlineVariant.withAlpha(80),
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Subtotal', style: Theme.of(context).textTheme.bodyMedium),
+                                PriceText(price: asJsonMap(totals['subtotal'])),
+                              ],
+                            ),
+                            if (((asJsonMap(totals['discount'])?['raw'] as num?)?.toDouble() ?? 0) > 0) ...[
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Discount',
+                                    style: TextStyle(
+                                      color: Colors.green.shade700,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Text(
+                                    '- ${priceFormatted(asJsonMap(totals['discount']))}',
+                                    style: TextStyle(
+                                      color: Colors.green.shade700,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                            if (((asJsonMap(totals['shipping'])?['raw'] as num?)?.toDouble() ?? 0) > 0) ...[
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Shipping', style: Theme.of(context).textTheme.bodyMedium),
+                                  PriceText(price: asJsonMap(totals['shipping'])),
+                                ],
+                              ),
+                            ],
+                            if (((asJsonMap(totals['tax'])?['raw'] as num?)?.toDouble() ?? 0) > 0) ...[
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Tax', style: Theme.of(context).textTheme.bodyMedium),
+                                  PriceText(price: asJsonMap(totals['tax'])),
+                                ],
+                              ),
+                            ],
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8),
+                              child: Divider(height: 1),
+                            ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Total',
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                PriceText(
+                                  price: asJsonMap(totals['total']),
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],

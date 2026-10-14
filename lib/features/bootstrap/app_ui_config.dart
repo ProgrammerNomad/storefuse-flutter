@@ -58,16 +58,25 @@ class ProductScreenUiConfig {
     required this.showSku,
     required this.stickyAddToCart,
     required this.relatedCount,
+    this.showReviews = true,
+    this.showShare = true,
+    this.showWishlist = true,
   });
 
   final bool showSku;
   final bool stickyAddToCart;
   final int relatedCount;
+  final bool showReviews;
+  final bool showShare;
+  final bool showWishlist;
 
   static const defaults = ProductScreenUiConfig(
     showSku: true,
     stickyAddToCart: false,
     relatedCount: 6,
+    showReviews: true,
+    showShare: true,
+    showWishlist: true,
   );
 }
 
@@ -76,17 +85,53 @@ class CartScreenUiConfig {
     required this.showCoupon,
     required this.showFreeShippingBar,
     required this.emptyCtaHref,
+    this.showGuestPrompt = true,
   });
 
   final bool showCoupon;
   final bool showFreeShippingBar;
   final String emptyCtaHref;
+  final bool showGuestPrompt;
 
   static const defaults = CartScreenUiConfig(
     showCoupon: true,
     showFreeShippingBar: true,
     emptyCtaHref: '/products',
+    showGuestPrompt: true,
   );
+}
+
+class CheckoutScreenUiConfig {
+  const CheckoutScreenUiConfig({
+    this.showGuestPrompt = true,
+  });
+
+  final bool showGuestPrompt;
+  static const defaults = CheckoutScreenUiConfig();
+}
+
+class SearchScreenUiConfig {
+  const SearchScreenUiConfig({
+    this.placeholder = 'Search products...',
+    this.trendingTerms = const [],
+  });
+
+  final String placeholder;
+  final List<String> trendingTerms;
+  static const defaults = SearchScreenUiConfig();
+}
+
+class ThemeUiConfig {
+  const ThemeUiConfig({
+    this.secondaryColor,
+    this.themeMode = 'system',
+    this.fontFamily = 'Default',
+  });
+
+  final String? secondaryColor;
+  final String themeMode;
+  final String fontFamily;
+  static const defaults = ThemeUiConfig();
 }
 
 /// Parsed `settings.app.ui` (storefuse.app-ui.v1).
@@ -96,6 +141,10 @@ class AppUiConfig {
     this.productCard = ProductCardUiConfig.defaults,
     this.productScreen = ProductScreenUiConfig.defaults,
     this.cartScreen = CartScreenUiConfig.defaults,
+    this.checkoutScreen = CheckoutScreenUiConfig.defaults,
+    this.searchScreen = SearchScreenUiConfig.defaults,
+    this.theme = ThemeUiConfig.defaults,
+    this.navTabs = const ['home', 'shop', 'search', 'cart', 'account'],
     this.shopTitle = 'Products',
     this.searchLayout,
     this.homeSectionOrder = _defaultHomeOrder,
@@ -116,6 +165,10 @@ class AppUiConfig {
   final ProductCardUiConfig productCard;
   final ProductScreenUiConfig productScreen;
   final CartScreenUiConfig cartScreen;
+  final CheckoutScreenUiConfig checkoutScreen;
+  final SearchScreenUiConfig searchScreen;
+  final ThemeUiConfig theme;
+  final List<String> navTabs;
   final String shopTitle;
   final CatalogLayout? searchLayout;
   final List<String> homeSectionOrder;
@@ -136,6 +189,9 @@ class AppUiConfig {
     final search = asJsonMap(screens['search']) ?? {};
     final product = asJsonMap(screens['product']) ?? {};
     final cart = asJsonMap(screens['cart']) ?? {};
+    final checkout = asJsonMap(screens['checkout']) ?? {};
+    final themeMap = asJsonMap(raw['theme']) ?? {};
+    final navMap = asJsonMap(raw['navigation']) ?? {};
     final home =
         asJsonMap(screens['home']) ?? asJsonMap(raw['home']) ?? {};
 
@@ -177,14 +233,40 @@ class AppUiConfig {
           product['related_count'],
           fallback: ProductScreenUiConfig.defaults.relatedCount,
         ).clamp(0, 12),
+        showReviews: product['show_reviews'] != false,
+        showShare: product['show_share'] != false,
+        showWishlist: product['show_wishlist'] != false,
       ),
       cartScreen: CartScreenUiConfig(
         showCoupon: cart['show_coupon'] != false,
         showFreeShippingBar: cart['show_free_shipping_bar'] != false,
+        showGuestPrompt: cart['show_guest_prompt'] != false,
         emptyCtaHref:
             cart['empty_cta_href']?.toString() ??
             CartScreenUiConfig.defaults.emptyCtaHref,
       ),
+      checkoutScreen: CheckoutScreenUiConfig(
+        showGuestPrompt: checkout['show_guest_prompt'] != false,
+      ),
+      searchScreen: SearchScreenUiConfig(
+        placeholder: search['placeholder']?.toString() ??
+            SearchScreenUiConfig.defaults.placeholder,
+        trendingTerms: (search['trending_terms'] as List?)
+                ?.map((e) => e.toString())
+                .where((e) => e.isNotEmpty)
+                .toList() ??
+            const [],
+      ),
+      theme: ThemeUiConfig(
+        secondaryColor: themeMap['secondary_color']?.toString(),
+        themeMode: themeMap['mode']?.toString() ?? 'system',
+        fontFamily: themeMap['font_family']?.toString() ?? 'Default',
+      ),
+      navTabs: (navMap['tabs'] as List?)
+              ?.map((e) => e.toString().toLowerCase().trim())
+              .where((e) => e.isNotEmpty)
+              .toList() ??
+          const ['home', 'shop', 'search', 'cart', 'account'],
       shopTitle: shop['title']?.toString() ?? 'Products',
       searchLayout: searchOverride,
       homeSectionOrder: order.isEmpty ? _defaultHomeOrder : order,

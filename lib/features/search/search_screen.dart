@@ -50,20 +50,52 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             padding: const EdgeInsets.all(12),
             child: TextField(
               controller: _controller,
-              decoration: const InputDecoration(
-                hintText: 'Search products (min 2 chars)',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: ui.searchScreen.placeholder.isNotEmpty
+                    ? ui.searchScreen.placeholder
+                    : 'Search products (min 2 chars)',
+                prefixIcon: const Icon(Icons.search),
+                border: const OutlineInputBorder(),
               ),
               onChanged: _onQueryChanged,
             ),
           ),
           if (!canSearch)
-            const Expanded(
-              child: EmptyStateView(
-                title: 'Start typing to search',
-                message: 'Enter at least 2 characters.',
-                icon: Icons.search,
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                children: [
+                  if (ui.searchScreen.trendingTerms.isNotEmpty) ...[
+                    Text(
+                      'Trending Searches',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        for (final term in ui.searchScreen.trendingTerms)
+                          ActionChip(
+                            label: Text(term),
+                            onPressed: () {
+                              _controller.text = term;
+                              setState(() => _query = term);
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                  const SizedBox(height: 32),
+                  const EmptyStateView(
+                    title: 'Start typing to search',
+                    message: 'Enter at least 2 characters.',
+                    icon: Icons.search,
+                  ),
+                ],
               ),
             )
           else
