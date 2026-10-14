@@ -2,6 +2,34 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:storefuse_app/core/models/json_helpers.dart';
 
 void main() {
+  test('asStringList parses string IDs from Bridge arrays', () {
+    expect(asStringList(['hero', 'featured', 'promo']), [
+      'hero',
+      'featured',
+      'promo',
+    ]);
+    expect(asStringList(['cod', 'bacs', 'cheque']), [
+      'cod',
+      'bacs',
+      'cheque',
+    ]);
+    expect(asStringList(null), isEmpty);
+    expect(asStringList('not-a-list'), isEmpty);
+    expect(asStringList(['', 'visible']), ['visible']);
+  });
+
+  test('asJsonList still maps object lists only', () {
+    final objects = asJsonList([
+      {'id': 'flat_rate:1', 'label': 'Flat'},
+    ]);
+    expect(objects.length, 1);
+    expect(objects.first['id'], 'flat_rate:1');
+    expect(
+      () => asJsonList(['cod', 'bacs']),
+      throwsA(isA<TypeError>()),
+    );
+  });
+
   test('productThumbnailUrl resolves thumbnail images and image', () {
     expect(
       productThumbnailUrl({
@@ -74,6 +102,51 @@ void main() {
         optionValue: 's',
         selectedOptions: {'Color': 'Red'},
       ),
+      isTrue,
+    );
+  });
+
+  test('productInStock prefers is_in_stock when key present', () {
+    expect(
+      productInStock({
+        'is_in_stock': false,
+        'stock_status': 'instock',
+      }),
+      isFalse,
+    );
+    expect(
+      productInStock({
+        'is_in_stock': true,
+        'stock_status': 'outofstock',
+      }),
+      isTrue,
+    );
+  });
+
+  test('productInStock falls back to stock_status when is_in_stock absent', () {
+    expect(
+      productInStock({'stock_status': 'instock'}),
+      isTrue,
+    );
+    expect(
+      productInStock({'stock_status': 'onbackorder'}),
+      isTrue,
+    );
+    expect(
+      productInStock({'stock_status': 'outofstock'}),
+      isFalse,
+    );
+    expect(productInStock({}), isFalse);
+  });
+
+  test('productInStock treats summary payload with is_in_stock as in stock', () {
+    expect(
+      productInStock({
+        'slug': 'hat',
+        'name': 'Hat',
+        'is_in_stock': true,
+        'stock_status': 'instock',
+      }),
       isTrue,
     );
   });

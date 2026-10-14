@@ -2,10 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/empty_state_view.dart';
-import '../../core/widgets/paginated_list_view.dart';
-import '../../core/widgets/product_list_tile.dart';
+import '../../core/widgets/paginated_product_catalog.dart';
+import '../bootstrap/app_ui_config.dart';
 import '../catalog/catalog_repository.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
@@ -37,9 +38,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final canSearch = _query.length >= 2;
+    final ui = ref.watch(appUiConfigProvider);
+    final catalog = ui.catalogForScreen('search');
+    final title = ui.screenTitle('search') ?? 'Search';
 
     return AppScaffold(
-      title: 'Search',
+      title: title,
       body: Column(
         children: [
           Padding(
@@ -64,14 +68,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             )
           else
             Expanded(
-              child: PaginatedListView(
+              child: PaginatedProductCatalog(
                 key: ValueKey(_query),
+                catalogConfig: catalog,
+                cardConfig: ui.productCard,
                 emptyTitle: 'No results',
                 emptyMessage: 'Try a different search term.',
                 loadPage: (page) => ref
                     .read(catalogRepositoryProvider)
                     .searchPage(q: _query, page: page),
-                itemBuilder: (context, p, _) => ProductListTile(product: p),
               ),
             ),
         ],

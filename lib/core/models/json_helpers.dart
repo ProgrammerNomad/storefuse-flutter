@@ -7,6 +7,16 @@ List<JsonMap> asJsonList(dynamic value) {
   return value.map((e) => Map<String, dynamic>.from(e as Map)).toList();
 }
 
+List<String> asStringList(dynamic value) {
+  if (value is! List) return const [];
+  final out = <String>[];
+  for (final e in value) {
+    final s = e?.toString() ?? '';
+    if (s.isNotEmpty) out.add(s);
+  }
+  return out;
+}
+
 JsonMap? asJsonMap(dynamic value) {
   if (value is JsonMap) return value;
   return null;
@@ -43,11 +53,22 @@ String _decodeHtmlEntities(String input) {
 }
 
 bool productInStock(JsonMap product) {
+  if (product.containsKey('is_in_stock')) {
+    return product['is_in_stock'] == true;
+  }
   final status = product['stock_status'] as String?;
   if (status != null) {
     return status == 'instock' || status == 'onbackorder';
   }
-  return product['is_in_stock'] == true;
+  if (product['type']?.toString() == 'variable') {
+    final variations = asJsonList(product['variations']);
+    for (final v in variations) {
+      if (v['purchasable'] == false) continue;
+      if (productInStock(v)) return true;
+    }
+    if (variations.isNotEmpty) return false;
+  }
+  return false;
 }
 
 bool productOnSale(JsonMap product) {

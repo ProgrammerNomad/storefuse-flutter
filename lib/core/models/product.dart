@@ -15,6 +15,7 @@ class Product {
     this.descriptionHtml,
     this.price,
     this.stockStatus,
+    this.isInStock,
     this.images = const [],
     this.attributes = const [],
     this.variations = const [],
@@ -33,6 +34,7 @@ class Product {
   final String? descriptionHtml;
   final JsonMap? price;
   final String? stockStatus;
+  final bool? isInStock;
   final List<JsonMap> images;
   final List<JsonMap> attributes;
   final List<JsonMap> variations;
@@ -56,6 +58,9 @@ class Product {
       descriptionHtml: json['description']?.toString(),
       price: asJsonMap(json['price']),
       stockStatus: json['stock_status']?.toString(),
+      isInStock: json.containsKey('is_in_stock')
+          ? json['is_in_stock'] == true
+          : null,
       images: asJsonList(json['images']),
       attributes: asJsonList(json['attributes']),
       variations: asJsonList(json['variations']),
@@ -74,6 +79,7 @@ class Product {
     if (description != null) 'description': description,
     if (price != null) 'price': price,
     if (stockStatus != null) 'stock_status': stockStatus,
+    if (isInStock != null) 'is_in_stock': isInStock,
     'images': images,
     'attributes': attributes,
     'variations': variations,

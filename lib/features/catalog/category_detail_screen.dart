@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/models/json_helpers.dart';
 import '../../core/providers/providers.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/error_view.dart';
 import '../../core/widgets/product_card.dart';
+import '../../core/widgets/product_list_tile.dart';
+import '../bootstrap/app_ui_config.dart';
 import 'catalog_repository.dart';
 
 class CategoryDetailScreen extends ConsumerStatefulWidget {
@@ -79,8 +82,16 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final title = _category?['name'] as String? ?? widget.slug;
+    final ui = ref.watch(appUiConfigProvider);
+    final catalog = ui.catalogForScreen('category');
+    final cardConfig = ui.productCard;
+    final title =
+        _category?['name'] as String? ??
+        ui.screenTitle('category') ??
+        widget.slug;
     final count = _category?['count'];
+    final columns = catalog.layout == CatalogLayout.grid ? catalog.columns : 1;
+
     return AppScaffold(
       title: title,
       body: _loading
@@ -101,19 +112,30 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
                         child: Text('$count products'),
                       ),
                     ),
-                  SliverGrid(
-                    delegate: SliverChildBuilderDelegate((_, i) {
-                      if (i >= _products.length) return null;
-                      return ProductCard(product: _products[i]);
-                    }, childCount: _products.length),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 0.72,
-                          crossAxisSpacing: 8,
-                          mainAxisSpacing: 8,
-                        ),
-                  ),
+                  if (catalog.layout == CatalogLayout.list)
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (_, i) =>
+                            ProductListTile(product: _products[i]),
+                        childCount: _products.length,
+                      ),
+                    )
+                  else
+                    SliverGrid(
+                      delegate: SliverChildBuilderDelegate((_, i) {
+                        if (i >= _products.length) return null;
+                        return ProductCard(
+                          product: _products[i],
+                          cardConfig: cardConfig,
+                        );
+                      }, childCount: _products.length),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        childAspectRatio: catalog.childAspectRatioFor(columns),
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                      ),
+                    ),
                   if (_page < _totalPages)
                     SliverToBoxAdapter(
                       child: Padding(

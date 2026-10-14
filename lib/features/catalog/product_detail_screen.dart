@@ -20,7 +20,9 @@ import '../../core/widgets/store_html.dart';
 import '../account/wishlist_ids_provider.dart';
 import '../auth/auth_repository.dart';
 import '../auth/auth_session_provider.dart';
+import '../bootstrap/app_ui_config.dart';
 import '../bootstrap/bootstrap_provider.dart';
+import '../../core/widgets/product_card.dart';
 import '../cart/cart_provider.dart';
 import 'catalog_repository.dart';
 
@@ -100,6 +102,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           ref.watch(bootstrapProvider).valueOrNull?.statusData?['features'],
         ) ??
         {};
+    final pdpUi = ref.watch(appUiConfigProvider).productScreen;
+    final cardConfig = ref.watch(appUiConfigProvider).productCard;
 
     return AppScaffold(
       title: 'Product',
@@ -164,10 +168,37 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               {'simple', 'variable'}.contains(product.type) &&
               modules['cart'] != false &&
               (!product.isVariable || variationId != null);
+          final rawProduct = snapshot.data!;
+          final sku = rawProduct['sku']?.toString();
+          final related = asJsonList(rawProduct['related_products']);
+          final relatedLimit = pdpUi.relatedCount;
+          final visibleRelated = relatedLimit > 0
+              ? related.take(relatedLimit).toList()
+              : <JsonMap>[];
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
+          Future<void> addToCart() async {
+            try {
+              await ref.read(cartProvider.notifier).addProduct(
+                    productId: product.id,
+                    quantity: _quantity,
+                    variationId: variationId,
+                  );
+              if (context.mounted) {
+                SnackBarHelper.showMessage(context, 'Added to cart');
+              }
+            } on StoreFuseApiException catch (e) {
+              if (!context.mounted) return;
+              SnackBarHelper.showException(context, e);
+            }
+          }
+
+          final addButton = LoadingButton(
+            label: 'Add to cart',
+            loading: ref.watch(cartProvider).loading,
+            onPressed: !canAdd ? null : addToCart,
+          );
+
+          final scrollContent = <Widget>[
               if (images.isNotEmpty)
                 ProductGallery(key: ValueKey(variationId), images: images),
               const SizedBox(height: 12),
@@ -175,6 +206,15 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 product.name,
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
+              if (pdpUi.showSku && sku != null && sku.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'SKU: $sku',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+                ),
+              ],
               if (productOnSale(selectedProduct))
                 const Padding(
                   padding: EdgeInsets.only(top: 4),
@@ -353,33 +393,30 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     ),
                 ],
               ),
-              LoadingButton(
-                label: 'Add to cart',
-                loading: ref.watch(cartProvider).loading,
-                onPressed: !canAdd
-                    ? null
-                    : () async {
-                        try {
-                          await ref
-                              .read(cartProvider.notifier)
-                              .addProduct(
-                                productId: product.id,
-                                quantity: _quantity,
-                                variationId: variationId,
-                              );
-                          if (context.mounted) {
-                            if (!context.mounted) return;
-                            SnackBarHelper.showMessage(
-                              context,
-                              'Added to cart',
-                            );
-                          }
-                        } on StoreFuseApiException catch (e) {
-                          if (!context.mounted) return;
-                          SnackBarHelper.showException(context, e);
-                        }
-                      },
-              ),
+              if (!pdpUi.stickyAddToCart) addButton,
+              if (visibleRelated.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Text(
+                  'Related products',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 240,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: visibleRelated.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (_, i) => SizedBox(
+                      width: 160,
+                      child: ProductCard(
+                        product: visibleRelated[i],
+                        cardConfig: cardConfig,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               if (reviewsEnabled) ...[
                 const SizedBox(height: 32),
                 Text('Reviews', style: Theme.of(context).textTheme.titleMedium),
@@ -422,6 +459,36 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 if (ref.watch(isLoggedInProvider))
                   _ReviewForm(productId: product.id),
               ],
+          ];
+
+          if (!pdpUi.stickyAddToCart) {
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: scrollContent,
+            );
+          }
+
+          return Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: scrollContent,
+                ),
+              ),
+              Material(
+                elevation: 4,
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: addButton,
+                    ),
+                  ),
+                ),
+              ),
             ],
           );
         },

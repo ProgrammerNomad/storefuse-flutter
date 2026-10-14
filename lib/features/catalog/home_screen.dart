@@ -10,6 +10,7 @@ import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/error_view.dart';
 import '../../core/widgets/product_card.dart';
 import '../../core/widgets/shimmer_loading.dart' show ProductRowSkeleton;
+import '../bootstrap/app_ui_config.dart';
 import '../bootstrap/bootstrap_provider.dart';
 import '../bootstrap/store_branding.dart';
 import 'storefront_providers.dart';
@@ -75,11 +76,92 @@ class _HomepageBody extends ConsumerWidget {
     final promo = merch.promo;
     final bestHeading = merch.bestSellersHeading;
     final newHeading = merch.newArrivalsHeading;
+    final ui = ref.watch(appUiConfigProvider);
+    final layoutMeta = asJsonMap(homepage['layout']);
+    var sectionOrder = ui.homeSectionOrder;
+    final orderFromApi = asStringList(layoutMeta?['section_order']);
+    if (orderFromApi.isNotEmpty) {
+      sectionOrder = orderFromApi;
+    }
+    final hidden = Set<String>.from(ui.homeHiddenSections);
+    for (final id in asStringList(
+      layoutMeta?['hide_sections'] ?? layoutMeta?['hidden'],
+    )) {
+      hidden.add(id);
+    }
+
+    final sections = _homeSectionWidgets(
+      context: context,
+      ref: ref,
+      announcement: announcement,
+      hero: hero,
+      featured: featured,
+      promo: promo,
+      merch: merch,
+      name: name,
+      tagline: tagline,
+      bestHeading: bestHeading,
+      newHeading: newHeading,
+    );
+
+    final children = <Widget>[];
+    for (final id in sectionOrder) {
+      if (hidden.contains(id)) continue;
+      children.addAll(sections[id] ?? const []);
+    }
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
       children: [
+        ...children,
+        _EmptyCatalogHint(
+          bestProvider: homepageBestSellersProvider,
+          newProvider: homepageNewArrivalsProvider,
+        ),
+        if (showDevInfo) ...[
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Builder(
+              builder: (context) {
+                final bootstrap = ref.watch(bootstrapProvider).valueOrNull;
+                if (bootstrap?.statusData == null) {
+                  return Text(
+                    'Dev flavor - Bridge debug hidden when APP_FLAVOR=prod.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  );
+                }
+                return Text(
+                  'Bridge ${bootstrap!.statusData!['version']} · '
+                  'Checkout: ${bootstrap.headlessCheckout ? 'headless' : 'redirect'}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                );
+              },
+            ),
+          ),
+        ],
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Map<String, List<Widget>> _homeSectionWidgets({
+    required BuildContext context,
+    required WidgetRef ref,
+    required JsonMap? announcement,
+    required JsonMap hero,
+    required List<JsonMap> featured,
+    required JsonMap? promo,
+    required HomepageMerchandising merch,
+    required String name,
+    required String? tagline,
+    required String bestHeading,
+    required String newHeading,
+  }) {
+    final heroImage = _heroImageUrl(hero);
+    return {
+      'announcement_bar': [
         if (announcement?['enabled'] == true &&
             (announcement?['text']?.toString().isNotEmpty ?? false))
           Material(
@@ -95,14 +177,16 @@ class _HomepageBody extends ConsumerWidget {
                 ),
                 child: Text(
                   announcement!['text'].toString(),
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: Colors.white),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ),
             ),
           ),
+      ],
+      'hero': [
         Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -134,7 +218,7 @@ class _HomepageBody extends ConsumerWidget {
                 ),
               if (tagline != null) ...[
                 const SizedBox(height: 8),
-                Text(tagline!),
+                Text(tagline),
               ],
               const SizedBox(height: 16),
               Wrap(
@@ -164,7 +248,7 @@ class _HomepageBody extends ConsumerWidget {
             ],
           ),
         ),
-        if (_heroImageUrl(hero) != null)
+        if (heroImage != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: ClipRRect(
@@ -172,12 +256,24 @@ class _HomepageBody extends ConsumerWidget {
               child: AspectRatio(
                 aspectRatio: 16 / 9,
                 child: CachedNetworkImage(
-                  imageUrl: _heroImageUrl(hero)!,
+                  imageUrl: heroImage,
                   fit: BoxFit.cover,
                 ),
               ),
             ),
           ),
+        for (final field in ['rating_text', 'shipping_text'])
+          if (hero[field]?.toString().isNotEmpty == true)
+            ListTile(
+              leading: Icon(
+                field == 'rating_text'
+                    ? Icons.star_outline
+                    : Icons.local_shipping_outlined,
+              ),
+              title: Text(hero[field].toString()),
+            ),
+      ],
+      'featured_categories': [
         if (featured.isNotEmpty) ...[
           const SizedBox(height: 16),
           SizedBox(
@@ -209,9 +305,9 @@ class _HomepageBody extends ConsumerWidget {
                                     fit: BoxFit.cover,
                                   )
                                 : ColoredBox(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.surfaceContainerHighest,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .surfaceContainerHighest,
                                     child: const Icon(Icons.category),
                                   ),
                           ),
@@ -232,6 +328,23 @@ class _HomepageBody extends ConsumerWidget {
             ),
           ),
         ],
+      ],
+      'trust_items': [
+        for (final item in merch.trustItems)
+          if (item['enabled'] != false)
+            ListTile(
+              leading: const Icon(Icons.verified_outlined),
+              title: Text(item['title']?.toString() ?? ''),
+              subtitle: Text(item['description']?.toString() ?? ''),
+            ),
+      ],
+      'best_sellers': [
+        _ProductRow(title: bestHeading, provider: homepageBestSellersProvider),
+      ],
+      'new_arrivals': [
+        _ProductRow(title: newHeading, provider: homepageNewArrivalsProvider),
+      ],
+      'promo_banner': [
         if (promo?['enabled'] == true) ...[
           const SizedBox(height: 16),
           Padding(
@@ -250,9 +363,8 @@ class _HomepageBody extends ConsumerWidget {
                     if (promo?['headline'] != null)
                       Text(
                         promo!['headline'].toString(),
-                        style: Theme.of(
-                          context,
-                        ).textTheme.titleMedium?.copyWith(color: Colors.white),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(color: Colors.white),
                       ),
                     if (promo?['body'] != null)
                       Text(
@@ -277,54 +389,8 @@ class _HomepageBody extends ConsumerWidget {
             ),
           ),
         ],
-        for (final field in ['rating_text', 'shipping_text'])
-          if (hero[field]?.toString().isNotEmpty == true)
-            ListTile(
-              leading: Icon(
-                field == 'rating_text'
-                    ? Icons.star_outline
-                    : Icons.local_shipping_outlined,
-              ),
-              title: Text(hero[field].toString()),
-            ),
-        for (final item in merch.trustItems)
-          if (item['enabled'] != false)
-            ListTile(
-              leading: const Icon(Icons.verified_outlined),
-              title: Text(item['title']?.toString() ?? ''),
-              subtitle: Text(item['description']?.toString() ?? ''),
-            ),
-        _ProductRow(title: bestHeading, provider: homepageBestSellersProvider),
-        _ProductRow(title: newHeading, provider: homepageNewArrivalsProvider),
-        _EmptyCatalogHint(
-          bestProvider: homepageBestSellersProvider,
-          newProvider: homepageNewArrivalsProvider,
-        ),
-        if (showDevInfo) ...[
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Builder(
-              builder: (context) {
-                final bootstrap = ref.watch(bootstrapProvider).valueOrNull;
-                if (bootstrap?.statusData == null) {
-                  return Text(
-                    'Dev flavor - Bridge debug hidden when APP_FLAVOR=prod.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  );
-                }
-                return Text(
-                  'Bridge ${bootstrap!.statusData!['version']} · '
-                  'Checkout: ${bootstrap.headlessCheckout ? 'headless' : 'redirect'}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                );
-              },
-            ),
-          ),
-        ],
-        const SizedBox(height: 24),
       ],
-    );
+    };
   }
 
   String? _heroImageUrl(JsonMap hero) {
@@ -385,6 +451,7 @@ class _ProductRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final cardConfig = ref.watch(appUiConfigProvider).productCard;
     final productsAsync = ref.watch(provider);
     return productsAsync.when(
       loading: () => const SizedBox.shrink(),
@@ -417,7 +484,10 @@ class _ProductRow extends ConsumerWidget {
                 separatorBuilder: (_, _) => const SizedBox(width: 12),
                 itemBuilder: (_, i) => SizedBox(
                   width: 160,
-                  child: ProductCard(product: products[i]),
+                  child: ProductCard(
+                    product: products[i],
+                    cardConfig: cardConfig,
+                  ),
                 ),
               ),
             ),

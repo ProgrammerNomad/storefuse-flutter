@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/widgets/app_scaffold.dart';
-import '../../core/widgets/paginated_list_view.dart';
-import '../../core/widgets/product_list_tile.dart';
+import '../../core/widgets/paginated_product_catalog.dart';
+import '../bootstrap/app_ui_config.dart';
 import 'catalog_repository.dart';
 
 class ProductListScreen extends ConsumerStatefulWidget {
@@ -15,7 +16,7 @@ class ProductListScreen extends ConsumerStatefulWidget {
 }
 
 class _ProductListScreenState extends ConsumerState<ProductListScreen> {
-  final _listKey = GlobalKey<PaginatedListViewState>();
+  final _listKey = GlobalKey<PaginatedProductCatalogState>();
   String? _orderby;
   String _order = 'desc';
   bool _onSaleOnly = false;
@@ -154,8 +155,14 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final ui = ref.watch(appUiConfigProvider);
+    final catalog = ui.catalogForScreen('shop');
+    final title =
+        ui.screenTitle('shop') ??
+        (widget.categorySlug == null ? 'Products' : 'Category');
+
     return AppScaffold(
-      title: widget.categorySlug == null ? 'Products' : 'Category',
+      title: title,
       actions: [
         IconButton(
           icon: const Icon(Icons.tune),
@@ -163,13 +170,21 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
           tooltip: 'Filter',
         ),
       ],
-      body: RefreshIndicator(
-        onRefresh: () async => _listKey.currentState?.refresh(),
-        child: PaginatedListView(
+      body: PaginatedProductCatalog(
           key: _listKey,
           physics: const AlwaysScrollableScrollPhysics(),
+          catalogConfig: catalog,
+          cardConfig: ui.productCard,
           emptyTitle: 'No products yet',
           emptyMessage: 'Check back soon for new items.',
+          refreshKey: Object.hash(
+            _orderby,
+            _order,
+            _onSaleOnly,
+            _minPrice,
+            _maxPrice,
+            widget.categorySlug,
+          ),
           loadPage: (page) => ref
               .read(catalogRepositoryProvider)
               .productsPage(
@@ -181,10 +196,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                 maxPrice: _maxPrice,
                 onSale: _onSaleOnly ? true : null,
               ),
-          separatorBuilder: (_, _) => const Divider(height: 1),
-          itemBuilder: (context, p, _) => ProductListTile(product: p),
         ),
-      ),
     );
   }
 }

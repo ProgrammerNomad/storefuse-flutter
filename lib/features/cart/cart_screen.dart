@@ -5,11 +5,14 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/providers/providers.dart';
 import '../../core/models/json_helpers.dart';
+import '../../core/routing/store_href.dart';
 import '../../core/ui/show_store_error.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/empty_state_view.dart';
 import '../../core/widgets/cached_thumbnail.dart';
 import '../../core/widgets/price_text.dart';
+import '../bootstrap/app_ui_config.dart';
+import '../bootstrap/bootstrap_provider.dart';
 import 'cart_provider.dart';
 
 class CartScreen extends ConsumerStatefulWidget {
@@ -45,6 +48,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
   Future<void> _refresh() => ref.read(cartProvider.notifier).refresh();
 
+  void _openEmptyCta(BuildContext context, String href) {
+    final route = storeHrefToRoute(href);
+    if (route == null) return;
+    context.go(route);
+  }
+
   @override
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
@@ -52,6 +61,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final items = asJsonList(data?['items']);
     final totals = asJsonMap(data?['totals']);
     final coupons = asJsonList(data?['coupons']);
+    final cartUi = ref.watch(appUiConfigProvider).cartScreen;
+    final store = asJsonMap(
+      ref.watch(bootstrapProvider).valueOrNull?.settingsData?['store'],
+    );
+    final freeShippingThreshold =
+        (store?['free_shipping_threshold'] as num?)?.toDouble() ?? 0;
+    final freeShippingLabel = store?['free_shipping_label']?.toString();
 
     return AppScaffold(
       title: 'Cart',
@@ -105,7 +121,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                               EmptyStateView(
                                 title: 'Your cart is empty',
                                 actionLabel: 'Continue shopping',
-                                onAction: () => context.go('/products'),
+                                onAction: () => _openEmptyCta(
+                                  context,
+                                  cartUi.emptyCtaHref,
+                                ),
                               ),
                             ],
                           )
@@ -185,6 +204,14 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                   ),
                 ),
                 if (items.isNotEmpty) ...[
+                  if (cartUi.showFreeShippingBar &&
+                      freeShippingThreshold > 0 &&
+                      totals != null)
+                    _FreeShippingBar(
+                      threshold: freeShippingThreshold,
+                      label: freeShippingLabel,
+                      subtotalRaw: asJsonMap(totals['subtotal'])?['raw'],
+                    ),
                   if (coupons.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(
@@ -218,36 +245,37 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         }).toList(),
                       ),
                     ),
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _couponController,
-                            decoration: const InputDecoration(
-                              labelText: 'Coupon code',
+                  if (cartUi.showCoupon)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _couponController,
+                              decoration: const InputDecoration(
+                                labelText: 'Coupon code',
+                              ),
                             ),
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.check),
-                          onPressed: () async {
-                            try {
-                              await ref
-                                  .read(cartProvider.notifier)
-                                  .applyCoupon(_couponController.text.trim());
-                            } on StoreFuseApiException catch (e) {
-                              if (context.mounted) {
-                                if (!context.mounted) return;
-                                SnackBarHelper.showException(context, e);
+                          IconButton(
+                            icon: const Icon(Icons.check),
+                            onPressed: () async {
+                              try {
+                                await ref
+                                    .read(cartProvider.notifier)
+                                    .applyCoupon(_couponController.text.trim());
+                              } on StoreFuseApiException catch (e) {
+                                if (context.mounted) {
+                                  if (!context.mounted) return;
+                                  SnackBarHelper.showException(context, e);
+                                }
                               }
-                            }
-                          },
-                        ),
-                      ],
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
                   if (totals != null) ...[
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -288,6 +316,45 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 ],
               ],
             ),
+    );
+  }
+}
+
+class _FreeShippingBar extends StatelessWidget {
+  const _FreeShippingBar({
+    required this.threshold,
+    required this.label,
+    required this.subtotalRaw,
+  });
+
+  final double threshold;
+  final String? label;
+  final dynamic subtotalRaw;
+
+  @override
+  Widget build(BuildContext context) {
+    final subtotal = subtotalRaw is num ? subtotalRaw.toDouble() : 0.0;
+    if (subtotal <= 0) return const SizedBox.shrink();
+    final progress = (subtotal / threshold).clamp(0.0, 1.0);
+    final remaining = threshold - subtotal;
+    final message = remaining <= 0
+        ? (label?.isNotEmpty == true
+              ? label!
+              : 'You qualify for free shipping!')
+        : (label?.isNotEmpty == true
+              ? label!
+              : 'Add ${remaining.toStringAsFixed(0)} more for free shipping');
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(message, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 6),
+          LinearProgressIndicator(value: progress),
+        ],
+      ),
     );
   }
 }

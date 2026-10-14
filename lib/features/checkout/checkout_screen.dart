@@ -77,11 +77,12 @@ class _RedirectCheckout extends ConsumerWidget {
   final String? label;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Center(
-      child: Padding(
+    return SafeArea(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
               'Complete your purchase securely with the store’s available payment options.',
@@ -223,9 +224,7 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
   }
 
   List<JsonMap> _filterHeadlessMethods(List<JsonMap> methods) {
-    final allowed = asJsonList(widget.config['headless_gateways'])
-        .map((e) => e.toString())
-        .toSet();
+    final allowed = asStringList(widget.config['headless_gateways']).toSet();
     if (allowed.isEmpty) return methods;
     return methods.where((m) => allowed.contains(m['id']?.toString())).toList();
   }
