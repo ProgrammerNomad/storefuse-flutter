@@ -14,6 +14,7 @@ import '../../core/widgets/error_view.dart';
 import '../../core/widgets/guest_login_prompt.dart';
 import '../../core/widgets/loading_button.dart';
 
+import '../auth/auth_session_provider.dart';
 import '../bootstrap/app_ui_config.dart';
 import '../bootstrap/bootstrap_provider.dart';
 import '../cart/cart_provider.dart';
@@ -156,6 +157,7 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
   bool _different = false;
   bool _terms = false;
   bool _busy = true;
+  bool _initialized = false;
   String? _error;
   String? _quotedAddress;
   String? _quoteToken;
@@ -181,19 +183,72 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
   Future<void> _initialize() async {
     try {
       final client = await ref.read(apiClientProvider.future);
-      final me = (await client.authMe()).data;
-      for (final entry in (asJsonMap(me['billing']) ?? {}).entries) {
-        _billing[entry.key] = entry.value?.toString() ?? '';
+      JsonMap? me;
+      try {
+        me = (await client.authMe()).data;
+      } catch (_) {}
+      final session = ref.read(authSessionProvider).valueOrNull;
+      final userData = me ?? session ?? {};
+      final isLogged = userData['logged_in'] == true || ref.read(isLoggedInProvider);
+
+      JsonMap? savedAddresses;
+      if (isLogged) {
+        try {
+          savedAddresses = (await client.getAddresses()).data;
+        } catch (_) {}
       }
-      for (final entry in (asJsonMap(me['shipping']) ?? {}).entries) {
-        _shipping[entry.key] = entry.value?.toString() ?? '';
+
+      final billingSource = asJsonMap(savedAddresses?['billing']) ??
+          asJsonMap(userData['billing']) ??
+          {};
+      final shippingSource = asJsonMap(savedAddresses?['shipping']) ??
+          asJsonMap(userData['shipping']) ??
+          {};
+
+      for (final entry in billingSource.entries) {
+        final val = entry.value?.toString() ?? '';
+        if (val.isNotEmpty) {
+          _billing[entry.key] = val;
+        }
       }
-      _billing['country'] = _billing['country']?.isNotEmpty == true
-          ? _billing['country']!
-          : widget.config['default_country']?.toString() ?? '';
-      _shipping['country'] = _shipping['country']?.isNotEmpty == true
-          ? _shipping['country']!
-          : _billing['country']!;
+      for (final entry in shippingSource.entries) {
+        final val = entry.value?.toString() ?? '';
+        if (val.isNotEmpty) {
+          _shipping[entry.key] = val;
+        }
+      }
+
+      // User profile fallback if first_name, last_name, email not set in billing
+      final userFirst = userData['first_name']?.toString() ?? '';
+      final userLast = userData['last_name']?.toString() ?? '';
+      final userEmail = userData['email']?.toString() ?? '';
+
+      if ((_billing['first_name'] ?? '').isEmpty && userFirst.isNotEmpty) {
+        _billing['first_name'] = userFirst;
+      }
+      if ((_billing['last_name'] ?? '').isEmpty && userLast.isNotEmpty) {
+        _billing['last_name'] = userLast;
+      }
+      if ((_billing['email'] ?? '').isEmpty && userEmail.isNotEmpty) {
+        _billing['email'] = userEmail;
+      }
+      if ((_shipping['first_name'] ?? '').isEmpty && userFirst.isNotEmpty) {
+        _shipping['first_name'] = userFirst;
+      }
+      if ((_shipping['last_name'] ?? '').isEmpty && userLast.isNotEmpty) {
+        _shipping['last_name'] = userLast;
+      }
+
+      final defaultCountry = widget.config['default_country']?.toString() ?? '';
+      if ((_billing['country'] ?? '').isEmpty && defaultCountry.isNotEmpty) {
+        _billing['country'] = defaultCountry;
+      }
+      if ((_shipping['country'] ?? '').isEmpty) {
+        _shipping['country'] = _billing['country']?.isNotEmpty == true
+            ? _billing['country']!
+            : defaultCountry;
+      }
+
       _allPaymentMethods = asJsonList(
         (await client.getPaymentMethods()).data['methods'],
       );
@@ -221,7 +276,12 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
     } catch (e) {
       _error = e.toString();
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _initialized = true;
+          _busy = false;
+        });
+      }
     }
   }
 
@@ -444,6 +504,14 @@ class _HeadlessCheckoutFormState extends ConsumerState<_HeadlessCheckoutForm> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_initialized) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
     final totals = asJsonMap(_quote?['totals']) ?? {};
     final checkoutUi = ref.watch(appUiConfigProvider).checkoutScreen;
     return AbsorbPointer(
