@@ -43,6 +43,8 @@ If you paste the full REST URL by mistake, the client strips a trailing `/wp-jso
 
 `dart_defines.local.json` is gitignored. Never commit real shop URLs.
 
+In Cursor / VS Code, [`.vscode/settings.json`](../.vscode/settings.json) adds `--dart-define-from-file=dart_defines.local.json` to **Run** and **build** so you do not need the PowerShell scripts every time. Plain `flutter run` from a **system terminal** (outside the IDE) still needs the flag or `.\scripts\run_android_prod.ps1`.
+
 ---
 
 ## Inline defines (CI or one-off)

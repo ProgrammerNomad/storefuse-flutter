@@ -23,10 +23,16 @@ Optional `--dart-define` values: see [docs/env.example.md](docs/env.example.md).
 
 ## Run (dev)
 
+The Bridge URL is **baked in at compile time** (`--dart-define`), not read from a `.env` at runtime - so GitHub never contains your shop URL.
+
+This repo’s [`.vscode/settings.json`](.vscode/settings.json) passes `--dart-define-from-file=dart_defines.local.json` for **Run / Debug / Flutter build in Cursor**. After you create `dart_defines.local.json`, use **Stop + Run** (hot restart does not change the URL). Without that file, Flutter falls back to dev defaults (`http://10.0.2.2`).
+
 ```bash
 flutter pub get
 flutter run --dart-define=BRIDGE_BASE_URL=http://10.0.2.2
 ```
+
+Optional: copy [`.vscode/launch.json.example`](.vscode/launch.json.example) to `.vscode/launch.json` for dev vs prod launch configs in VS Code / Cursor.
 
 iOS simulator:
 

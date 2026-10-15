@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "StoreFuse (prod, dart_defines.local.json)",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": [
+        "--dart-define-from-file=dart_defines.local.json"
+      ]
+    },
+    {
+      "name": "StoreFuse (dev / local XAMPP)",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": [
+        "--dart-define=APP_FLAVOR=dev",
+        "--dart-define=BRIDGE_BASE_URL=http://10.0.2.2"
+      ]
+    }
+  ]
+}

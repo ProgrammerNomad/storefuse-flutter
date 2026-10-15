@@ -28,6 +28,7 @@ class StoreFuseApiClient {
     _dio.options.baseUrl = env.apiBaseUrl;
     _dio.options.connectTimeout = env.connectTimeout;
     _dio.options.receiveTimeout = env.receiveTimeout;
+    _dio.options.responseType = ResponseType.plain;
     _dio.options.headers['Accept'] = 'application/json';
     if (_cookieJar != null) {
       _dio.interceptors.add(CookieManager(_cookieJar));
@@ -51,9 +52,19 @@ class StoreFuseApiClient {
           handler.next(options);
         },
         onError: (error, handler) async {
+          JsonMap? errorJson;
           final body = error.response?.data;
-          final code = body is Map
-              ? (body['error'] is Map ? body['error']['code'] : body['code'])
+          if (body is Map) {
+            errorJson = Map<String, dynamic>.from(body);
+          } else if (body is String) {
+            try {
+              errorJson = _asJsonMap(body);
+            } catch (_) {}
+          }
+          final code = errorJson != null
+              ? (errorJson['error'] is Map
+                    ? errorJson['error']['code']
+                    : errorJson['code'])
               : null;
           final request = error.requestOptions;
           if ({'invalid_nonce', 'rest_cookie_invalid_nonce'}.contains(code) &&
@@ -74,8 +85,18 @@ class StoreFuseApiClient {
         },
         onResponse: (response, handler) {
           nonces.updateFromHeaders(response.headers.map);
-          response.data = _resolveDevelopmentUrls(response.data);
-          final data = response.data;
+          var data = response.data;
+          if (data is String) {
+            try {
+              data = _asJsonMap(data);
+              response.data = data;
+            } catch (_) {
+              handler.next(response);
+              return;
+            }
+          }
+          response.data = _resolveDevelopmentUrls(data);
+          data = response.data;
           if (data is Map<String, dynamic>) {
             final inner = data['data'];
             if (inner is Map<String, dynamic>) {
@@ -148,6 +169,25 @@ class StoreFuseApiClient {
     return data;
   }
 
+  /// WordPress sometimes emits notices before JSON; Dio may deliver a [String].
+  static JsonMap _asJsonMap(dynamic body) {
+    if (body is JsonMap) return body;
+    if (body is Map) return Map<String, dynamic>.from(body);
+    if (body is String) {
+      final trimmed = body.trim();
+      final start = trimmed.indexOf('{');
+      if (start < 0) {
+        throw StoreFuseApiException(message: 'Unexpected response shape.');
+      }
+      final decoded = jsonDecode(trimmed.substring(start));
+      if (decoded is! Map) {
+        throw StoreFuseApiException(message: 'Unexpected response shape.');
+      }
+      return Map<String, dynamic>.from(decoded);
+    }
+    throw StoreFuseApiException(message: 'Unexpected response shape.');
+  }
+
   bool _isNoStorePath(String path) {
     const prefixes = [
       '/cart',
@@ -174,14 +214,15 @@ class StoreFuseApiClient {
       if (hit != null) return hit;
     }
     try {
-      final response = await _dio.get<Map<String, dynamic>>(
+      final response = await _dio.get<dynamic>(
         path,
         queryParameters: query,
       );
-      final body = response.data;
-      if (body == null) {
+      final raw = response.data;
+      if (raw == null) {
         throw StoreFuseApiException(message: 'Empty response.');
       }
+      final body = _asJsonMap(raw);
       if (body.containsKey('error')) {
         throw EnvelopeParser.parseError(body);
       }
@@ -287,16 +328,17 @@ class StoreFuseApiClient {
       headers.addAll(extraHeaders);
     }
     try {
-      final response = await _dio.request<Map<String, dynamic>>(
+      final response = await _dio.request<dynamic>(
         path,
         data: data,
         queryParameters: query,
         options: Options(method: method, headers: headers),
       );
-      final body = response.data;
-      if (body == null) {
+      final raw = response.data;
+      if (raw == null) {
         throw StoreFuseApiException(message: 'Empty response.');
       }
+      final body = raw is Map<String, dynamic> ? raw : _asJsonMap(raw);
       if (body.containsKey('error')) {
         throw EnvelopeParser.parseError(body);
       }
@@ -307,8 +349,16 @@ class StoreFuseApiClient {
   }
 
   StoreFuseApiException _mapDioError(DioException e) {
+    if (kDebugMode) {
+      debugPrint(
+        'StoreFuse HTTP: type=${e.type} status=${e.response?.statusCode} '
+        'message=${e.message} error=${e.error}',
+      );
+    }
     final connectionFailed =
         e.error is SocketException ||
+        e.error is HandshakeException ||
+        e.error is TlsException ||
         e.type == DioExceptionType.connectionError ||
         e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.receiveTimeout ||
@@ -326,6 +376,22 @@ class StoreFuseApiClient {
     final data = e.response?.data;
     if (data is Map<String, dynamic> && data.containsKey('error')) {
       return EnvelopeParser.parseError(data);
+    }
+    if (data is String) {
+      try {
+        final map = _asJsonMap(data);
+        if (map.containsKey('error')) {
+          return EnvelopeParser.parseError(map);
+        }
+      } catch (_) {
+        // Fall through to generic message below.
+      }
+    }
+    if (e.response?.statusCode == null) {
+      final detail = e.error?.toString() ?? e.message ?? 'unknown';
+      return StoreFuseApiException(
+        message: 'Request failed ($detail).',
+      );
     }
     return EnvelopeParser.parseHttpBody(data, e.response?.statusCode);
   }
@@ -473,22 +539,56 @@ class StoreFuseApiClient {
   }
 
   Future<void> _bootstrapSession() async {
+    Object? adminError;
     try {
-      final response = await _dio.post<Map<String, dynamic>>(
+      await _bootstrapSessionAdminAjax();
+      return;
+    } catch (e) {
+      adminError = e;
+      if (kDebugMode) {
+        debugPrint('StoreFuse: admin-ajax session bootstrap failed: $e');
+      }
+    }
+    try {
+      await _bootstrapSessionRestNonce();
+    } catch (e) {
+      if (adminError is StoreFuseApiException) throw adminError;
+      if (e is StoreFuseApiException) rethrow;
+      throw StoreFuseApiException(
+        message: 'Could not restore your store session.',
+      );
+    }
+  }
+
+  Future<void> _bootstrapSessionAdminAjax() async {
+    try {
+      final response = await _dio.post<dynamic>(
         '${env.bridgeBaseUrl.replaceAll(RegExp(r'/+$'), '')}/wp-admin/admin-ajax.php',
         data: {'action': 'storefuse_session'},
         options: Options(contentType: Headers.formUrlEncodedContentType),
       );
-      final body = response.data;
-      if (body?['success'] != true || body?['data'] is! Map) {
+      final body = _asJsonMap(response.data);
+      if (body['success'] != true || body['data'] is! Map) {
         throw StoreFuseApiException(
           message: 'Could not restore your store session.',
         );
       }
-      nonces.updateFromJson(Map<String, dynamic>.from(body!['data'] as Map));
+      nonces.updateFromJson(Map<String, dynamic>.from(body['data'] as Map));
     } on DioException catch (e) {
       throw _mapDioError(e);
+    } on StoreFuseApiException {
+      rethrow;
+    } catch (_) {
+      throw StoreFuseApiException(
+        message: 'Could not restore your store session.',
+      );
     }
+  }
+
+  Future<void> _bootstrapSessionRestNonce() async {
+    final json = await _getEnvelope('/auth/nonce');
+    final result = EnvelopeParser.parseSuccess(json, (d) => d);
+    nonces.updateFromJson(result.data);
   }
 
   Future<List<Cookie>> cookiesFor(Uri uri) async =>

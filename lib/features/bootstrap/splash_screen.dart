@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -103,13 +104,28 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                   child: const Text('Retry'),
                 ),
               ],
-              if (!env.isProd) ...[
+              if (!env.isProd || kDebugMode) ...[
                 const SizedBox(height: 16),
                 Text(
-                  env.bridgeBaseUrl,
+                  env.isProd ? env.apiBaseUrl : env.bridgeBaseUrl,
                   style: Theme.of(context).textTheme.bodySmall,
                   textAlign: TextAlign.center,
                 ),
+                if (kDebugMode &&
+                    env.bridgeBaseUrl.contains('10.0.2.2')) ...[
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Text(
+                      'Local dev URL. Hot restart cannot switch stores - '
+                      'stop the app, then Run with '
+                      '"StoreFuse (prod, dart_defines.local.json)" or '
+                      'scripts/run_android_prod.ps1.',
+                      style: Theme.of(context).textTheme.labelSmall,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
               ],
             ],
           ),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'settings_provider.dart';
 import '../bootstrap/app_ui_config.dart';
 
+import '../../core/providers/providers.dart';
 import '../../core/widgets/app_scaffold.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -15,12 +16,18 @@ class SettingsScreen extends ConsumerWidget {
     final configuredThemeMode = ref.watch(appUiConfigProvider).theme.themeMode;
     final themeIsManagedByStore =
         configuredThemeMode == 'light' || configuredThemeMode == 'dark';
+    final env = ref.watch(appEnvProvider);
 
     return AppScaffold(
       title: 'Settings',
       body: ListView(
         children: [
           ListTile(title: const Text('App version'), subtitle: Text(version)),
+          ListTile(
+            title: const Text('Connected store'),
+            subtitle: Text('${env.apiBaseUrl}\n(flavor: ${env.flavor})'),
+            isThreeLine: true,
+          ),
           if (themeIsManagedByStore)
             ListTile(
               title: const Text('Appearance'),
