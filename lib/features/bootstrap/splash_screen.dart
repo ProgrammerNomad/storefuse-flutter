@@ -8,6 +8,7 @@ import '../../config/env.dart';
 import '../../core/providers/providers.dart';
 import '../../core/widgets/error_view.dart';
 import '../../core/widgets/store_logo.dart';
+import '../../core/widgets/storefuse_brand.dart';
 import 'bootstrap_provider.dart';
 import 'store_branding.dart';
 
@@ -75,9 +76,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
               StoreLogo(
                 logoUrl: logoUrl,
                 height: 64,
-                fallback: Text(
-                  storeName,
-                  style: Theme.of(context).textTheme.headlineSmall,
+                fallback: StoreFuseBrandLockup(
+                  name: storeName,
+                  markSize: 64,
+                  textStyle: Theme.of(context).textTheme.headlineSmall,
                 ),
               ),
               if (tagline != null) ...[
@@ -136,9 +138,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
             child: StoreLogo(
               logoUrl: logoUrl,
               height: 64,
-              fallback: Text(
-                storeName,
-                style: Theme.of(context).textTheme.headlineSmall,
+              fallback: StoreFuseBrandLockup(
+                name: storeName,
+                markSize: 64,
+                textStyle: Theme.of(context).textTheme.headlineSmall,
               ),
             ),
           );

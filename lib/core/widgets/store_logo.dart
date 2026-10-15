@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'storefuse_brand.dart';
 
 class StoreLogo extends StatelessWidget {
   const StoreLogo({
@@ -16,13 +17,13 @@ class StoreLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (logoUrl == null || logoUrl!.isEmpty) {
-      return fallback ?? const SizedBox.shrink();
+      return fallback ?? StoreFuseMark(size: height);
     }
     return CachedNetworkImage(
       imageUrl: logoUrl!,
       height: height,
       fit: BoxFit.contain,
-      errorWidget: (_, _, _) => fallback ?? const SizedBox.shrink(),
+      errorWidget: (_, _, _) => fallback ?? StoreFuseMark(size: height),
     );
   }
 }

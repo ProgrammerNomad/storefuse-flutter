@@ -109,16 +109,22 @@ class _HomepageBody extends ConsumerWidget {
       if (hidden.contains(id)) continue;
       children.addAll(sections[id] ?? const []);
     }
+    final hasVisibleProductSection = sectionOrder.any(
+      (id) =>
+          (id == 'best_sellers' || id == 'new_arrivals') &&
+          !hidden.contains(id),
+    );
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
       children: [
         ...children,
-        _EmptyCatalogHint(
-          bestProvider: homepageBestSellersProvider,
-          newProvider: homepageNewArrivalsProvider,
-        ),
+        if (hasVisibleProductSection)
+          _EmptyCatalogHint(
+            bestProvider: homepageBestSellersProvider,
+            newProvider: homepageNewArrivalsProvider,
+          ),
         if (showDevInfo) ...[
           const SizedBox(height: 24),
           Padding(
@@ -177,9 +183,9 @@ class _HomepageBody extends ConsumerWidget {
                 ),
                 child: Text(
                   announcement!['text'].toString(),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: Colors.white),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -305,9 +311,9 @@ class _HomepageBody extends ConsumerWidget {
                                     fit: BoxFit.cover,
                                   )
                                 : ColoredBox(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .surfaceContainerHighest,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.surfaceContainerHighest,
                                     child: const Icon(Icons.category),
                                   ),
                           ),
@@ -363,8 +369,9 @@ class _HomepageBody extends ConsumerWidget {
                     if (promo?['headline'] != null)
                       Text(
                         promo!['headline'].toString(),
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(color: Colors.white),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.titleMedium?.copyWith(color: Colors.white),
                       ),
                     if (promo?['body'] != null)
                       Text(

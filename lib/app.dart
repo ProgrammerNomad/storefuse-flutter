@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'features/bootstrap/bootstrap_provider.dart';
+import 'features/bootstrap/app_ui_config.dart';
 import 'features/bootstrap/store_branding.dart';
 import 'features/settings/settings_provider.dart';
 import 'routing/app_router.dart';
@@ -48,6 +49,12 @@ class _StoreFuseAppState extends ConsumerState<StoreFuseApp> {
     final storeName = ref.watch(storeNameProvider);
     final theme = ref.watch(storeThemeProvider);
     final appSettings = ref.watch(appSettingsProvider);
+    final configuredThemeMode = ref.watch(appUiConfigProvider).theme.themeMode;
+    final effectiveThemeMode = switch (configuredThemeMode) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => appSettings.themeMode,
+    };
     final darkTheme = ThemeData(
       colorScheme: ColorScheme.fromSeed(
         seedColor: theme.colorScheme.primary,
@@ -64,7 +71,7 @@ class _StoreFuseAppState extends ConsumerState<StoreFuseApp> {
       supportedLocales: AppLocalizations.supportedLocales,
       theme: theme,
       darkTheme: darkTheme,
-      themeMode: appSettings.themeMode,
+      themeMode: effectiveThemeMode,
       routerConfig: router,
       builder: (context, child) {
         return Column(

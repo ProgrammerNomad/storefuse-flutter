@@ -9,6 +9,7 @@ import '../../features/bootstrap/bootstrap_provider.dart';
 import '../../features/cart/cart_provider.dart';
 import '../../features/catalog/storefront_providers.dart';
 import 'store_logo.dart';
+import 'storefuse_brand.dart';
 
 class AppScaffold extends ConsumerWidget {
   const AppScaffold({
@@ -53,11 +54,11 @@ class AppScaffold extends ConsumerWidget {
                 child: StoreLogo(
                   logoUrl: logoUrl,
                   height: 28,
-                  fallback: Text(title),
+                  fallback: StoreFuseBrandLockup(name: title, markSize: 28),
                 ),
               )
             else
-              Flexible(child: Text(title, overflow: TextOverflow.ellipsis)),
+              Flexible(child: StoreFuseBrandLockup(name: title, markSize: 28)),
           ],
         ),
         actions: [
@@ -180,9 +181,10 @@ class _AppDrawer extends ConsumerWidget {
                 StoreLogo(
                   logoUrl: logoUrl,
                   height: 40,
-                  fallback: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleLarge,
+                  fallback: StoreFuseBrandLockup(
+                    name: title,
+                    markSize: 40,
+                    textStyle: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
                 if (ref.watch(storeTaglineProvider) != null)
