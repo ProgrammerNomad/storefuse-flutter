@@ -40,6 +40,19 @@ Production build (HTTPS only):
 flutter build apk --dart-define=APP_FLAVOR=prod --dart-define=BRIDGE_BASE_URL=https://shop.example.com
 ```
 
+### Production (local, not in GitHub)
+
+For your live store, keep the real URL in a **gitignored** file:
+
+```powershell
+Copy-Item dart_defines.example.json dart_defines.local.json
+# Edit BRIDGE_BASE_URL to your WordPress site root (not /wp-json/storefuse/v1)
+.\scripts\run_android_prod.ps1
+.\scripts\build_apk_prod.ps1
+```
+
+See [docs/env.example.md](docs/env.example.md).
+
 ## Quality checks
 
 ```bash

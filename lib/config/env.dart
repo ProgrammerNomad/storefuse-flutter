@@ -30,20 +30,37 @@ class AppEnv {
   Duration get receiveTimeout =>
       isProd ? const Duration(seconds: 30) : const Duration(seconds: 10);
 
+  /// WordPress site root when [url] accidentally includes `/wp-json/...`.
+  static String normalizeBridgeBaseUrl(String url, String apiNamespace) {
+    var value = url.trim().replaceAll(RegExp(r'/+$'), '');
+    if (value.isEmpty) return value;
+    final ns = apiNamespace.replaceAll(RegExp(r'^/+|/+$'), '');
+    final suffix = '/wp-json/$ns';
+    if (value.length >= suffix.length &&
+        value.substring(value.length - suffix.length).toLowerCase() ==
+            suffix.toLowerCase()) {
+      value = value.substring(0, value.length - suffix.length);
+      value = value.replaceAll(RegExp(r'/+$'), '');
+    }
+    return value;
+  }
+
   static AppEnv fromDartDefines() {
     const flavor = String.fromEnvironment('APP_FLAVOR', defaultValue: 'dev');
     const defaultUrl = flavor == 'prod'
         ? 'https://shop.example.com'
         : 'http://10.0.2.2';
+    const apiNamespace = String.fromEnvironment(
+      'API_NAMESPACE',
+      defaultValue: 'storefuse/v1',
+    );
+    const rawBridgeBaseUrl = String.fromEnvironment(
+      'BRIDGE_BASE_URL',
+      defaultValue: defaultUrl,
+    );
     return AppEnv._(
-      bridgeBaseUrl: const String.fromEnvironment(
-        'BRIDGE_BASE_URL',
-        defaultValue: defaultUrl,
-      ),
-      apiNamespace: const String.fromEnvironment(
-        'API_NAMESPACE',
-        defaultValue: 'storefuse/v1',
-      ),
+      bridgeBaseUrl: normalizeBridgeBaseUrl(rawBridgeBaseUrl, apiNamespace),
+      apiNamespace: apiNamespace,
       flavor: flavor,
       deepLinkScheme: const String.fromEnvironment(
         'STOREFRONT_DEEP_LINK_SCHEME',

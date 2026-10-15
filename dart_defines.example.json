@@ -1,0 +1,5 @@
+{
+  "APP_FLAVOR": "prod",
+  "BRIDGE_BASE_URL": "https://your-shop.com",
+  "API_NAMESPACE": "storefuse/v1"
+}

@@ -23,6 +23,14 @@ Create your own production Android keystore and local `android/key.properties` w
 flutter build appbundle --release --dart-define=APP_FLAVOR=prod --dart-define=BRIDGE_BASE_URL=https://shop.example.com --dart-define=STOREFRONT_DEEP_LINK_SCHEME=mystore
 ```
 
+For day-to-day prod builds on your machine, use gitignored [dart_defines.local.json](../dart_defines.example.json) (copy from `dart_defines.example.json`) and:
+
+```powershell
+flutter build appbundle --release --dart-define-from-file=dart_defines.local.json --dart-define=STOREFRONT_DEEP_LINK_SCHEME=mystore
+```
+
+Or `.\scripts\build_apk_prod.ps1` for a release APK. Do not commit `dart_defines.local.json`.
+
 Production requires HTTPS. Android release cleartext and backup are disabled. The debug configuration permits local development HTTP. Development responses from localhost are mapped to 10.0.2.2 only when that is the configured emulator host and ports agree; production URLs are never remapped. Use an HTTPS staging URL for physical devices and iOS unless you explicitly configure a local development exception.
 
 ## Supported checkout
